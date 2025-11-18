@@ -1,215 +1,207 @@
 import os
 import tempfile
+import subprocess
+import json
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse
 from PyPDF2 import PdfReader
 from typing import List
-import json
+from pydantic import BaseModel
 
+from app.gemini_evaluator import stage1_evaluate_code
 from app.pipeline import CandidateEvaluationPipeline
 from app.video_interview import conduct_video_interview, generate_interview_audio
 
-router = APIRouter()
+app_router = APIRouter()
 
-def extract_text_from_pdf(file: UploadFile) -> str:
-    """Extract text from PDF resume."""
-    try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-            content = file.file.read()
-            tmp_file.write(content)
-            tmp_file_path = tmp_file.name
-        
-        reader = PdfReader(tmp_file_path)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text() + "\n"
-        
-        os.unlink(tmp_file_path)
-        return text.strip()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Could not process PDF file: {e}")
+# ============ PYDANTIC MODELS ============
+class EvaluateStartRequest(BaseModel):
+    repo_link: str
+    job_description: str
+    ideal_candidate_profile: str
+    task_description: str
+    candidate_id: str
+    jd_id: str
+    resume_content: str
 
-# In-memory storage for sessions (use Redis in production)
+class SubmitMCQRequest(BaseModel):
+    candidate_id: str
+    mcq_answers: List[str]  # ['A', 'B', 'C']
+
+# In-memory session storage
 session_storage = {}
 
-@router.post("/evaluate/start")
-async def start_evaluation(
-    resume: UploadFile = File(..., description="Candidate's resume (PDF)"),
-    code_solution: str = Form(..., description="Candidate's code solution"),
-    job_description: str = Form(..., description="Job description text"),
-    ideal_candidate_profile: str = Form(..., description="Ideal candidate profile"),
-    task_description: str = Form(..., description="Task description for code solution"),
-    candidate_id: str = Form(..., description="Unique candidate identifier"),
-    jd_id: str = Form(..., description="Job description identifier")
-):
+# ============ HELPER FUNCTIONS ============
+def clone_and_extract_code(repo_link: str) -> str:
+    """Clone repo and extract code files (max 8KB for free tier)"""
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            subprocess.run(
+                ["git", "clone", repo_link, tmpdir],
+                check=True,
+                capture_output=True,
+                timeout=30
+            )
+            
+            code_content = ""
+            max_size = 8000
+            
+            for root, dirs, files in os.walk(tmpdir):
+                dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', '__pycache__', '.git']]
+                
+                for file in files:
+                    if file.endswith(('.py', '.js', '.java', '.cpp', '.c', '.go', '.rs', '.ts', '.tsx')):
+                        filepath = os.path.join(root, file)
+                        try:
+                            with open(filepath, 'r', encoding='utf-8') as f:
+                                file_content = f.read()
+                                if len(code_content) + len(file_content) < max_size:
+                                    code_content += f"# File: {file}\n{file_content}\n\n"
+                        except:
+                            pass
+            
+            return code_content if code_content else "No code files found in repository"
+    except subprocess.TimeoutExpired:
+        raise ValueError("Repository clone timed out (max 30s)")
+    except subprocess.CalledProcessError:
+        raise ValueError(f"Invalid repository link: {repo_link}")
+    except Exception as e:
+        raise ValueError(f"Failed to clone repository: {str(e)}")
+
+# ============ ENDPOINTS ============
+
+@app_router.post("/evaluate/start")
+async def start_evaluation(request: EvaluateStartRequest):
     """
-    STAGE 1 & 2: 
-    - Upload resume + code
-    - Gemini evaluates code + generates questions
-    - Qdrant scores resume fit & code fit
-    - Returns interview questions with AI audio
+    STAGE 1 & 2: Code evaluation + vector scoring
+    Returns: interview questions, MCQ questions, code description
     """
     try:
-        resume_text = extract_text_from_pdf(resume)
+        print(f"\n📝 Starting evaluation for candidate {request.candidate_id}")
         
+        # Extract code from GitHub
+        print(f"🔍 Cloning repository: {request.repo_link}")
+        code_solution = clone_and_extract_code(request.repo_link)
+        
+        # Initialize pipeline
         pipeline = CandidateEvaluationPipeline(
-            jd_text=job_description,
-            ideal_candidate_profile=ideal_candidate_profile,
-            task_description=task_description,
-            candidate_id=candidate_id,
-            jd_id=jd_id
+            jd_text=request.job_description,
+            ideal_candidate_profile=request.ideal_candidate_profile,
+            task_description=request.task_description,
+            candidate_id=request.candidate_id,
+            jd_id=request.jd_id
         )
         
-        # STAGE 1: Gemini code evaluation + question generation
+        # STAGE 1: Gemini evaluation
         stage1_result = pipeline.run_stage1(code_solution)
         
-        # STAGE 2: Qdrant vector scoring
-        stage2_result = pipeline.run_stage2(resume_text)
+        # STAGE 2: Qdrant scoring
+        stage2_result = pipeline.run_stage2(request.resume_content)
         
-        # Generate AI character audio for interview questions
+        # Generate audio for interview questions
         interview_questions = stage1_result['interview_questions']
-        mcq_questions = stage1_result['mcq_questions']
-        
-        interview_audio_data = []
+        audio_data = []
         for question in interview_questions:
-            audio_info = generate_interview_audio(question, character_persona="professional_interviewer")
-            interview_audio_data.append(audio_info)
+            audio_info = generate_interview_audio(question)
+            audio_data.append(audio_info)
         
-        # Store session data for stage 3
-        session_storage[candidate_id] = {
-            "pipeline": pipeline
-        }
+        # Store pipeline in session
+        session_storage[request.candidate_id] = pipeline
+        
+        print(f"✅ Evaluation stage 1-2 complete for {request.candidate_id}\n")
         
         return JSONResponse({
             "status": "success",
-            "candidate_id": candidate_id,
+            "candidate_id": request.candidate_id,
             "stage": "ready_for_interview",
+            "code_description": stage1_result.get('code_description', ''),
+            "code_quality_score": stage1_result.get('code_quality_score', 0),
             "interview_questions": interview_questions,
-            "interview_audio": interview_audio_data,
-            "mcq_questions": mcq_questions,
+            "interview_audio": audio_data,
+            "mcq_questions": stage1_result.get('mcq_questions', []),
             "scores_so_far": {
-                "code_quality": stage1_result['code_quality_score'],
-                "resume_fit": stage2_result['resume_fit_score'],
-                "code_fit": stage2_result['code_fit_score']
+                "code_quality": stage1_result.get('code_quality_score', 0),
+                "resume_fit": stage2_result.get('resume_fit_score', 0),
+                "code_fit": stage2_result.get('code_fit_score', 0)
             }
         })
+    except ValueError as e:
+        print(f"❌ Validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except RuntimeError as e:
+        print(f"❌ Runtime error: {str(e)}")
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
+        print(f"❌ Error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Evaluation start error: {str(e)}")
 
-@router.post("/evaluate/complete")
-async def complete_evaluation(
+@app_router.post("/evaluate/submit-responses")
+async def submit_interview_responses(
     candidate_id: str = Form(...),
-    interview_videos: List[UploadFile] = File(..., description="Video responses from candidate"),
-    mcq_answers: str = Form(..., description="JSON array of MCQ answers ['A','B','C','D','A']")
-):
-    """
-    STAGE 3 & 4: 
-    - Process video interview + MCQ
-    - Gemini final analysis
-    - Index in Qdrant
-    """
-    try:
-        if candidate_id not in session_storage:
-            raise HTTPException(status_code=404, detail="Session not found. Please start evaluation first.")
-        
-        pipeline = session_storage[candidate_id]["pipeline"]
-        
-        # Parse MCQ answers
-        mcq_answers_list = json.loads(mcq_answers)
-        
-        # Process video responses
-        video_data_list = []
-        for video_file in interview_videos:
-            video_bytes = await video_file.read()
-            video_data_list.append(video_bytes)
-        
-        # STAGE 3: Transcribe videos + score MCQ
-        interview_questions = pipeline.get_interview_questions()
-        transcriptions = conduct_video_interview(interview_questions, video_data_list)
-        stage3 = pipeline.run_stage3(transcriptions, mcq_answers_list)
-        
-        # STAGE 4: Gemini final comprehensive analysis
-        stage4 = pipeline.run_stage4()
-        
-        # Complete and index in Qdrant
-        candidate_id_final = pipeline.complete()
-        
-        # Clean up session
-        del session_storage[candidate_id]
-        
-        return JSONResponse({
-            "status": "success",
-            "candidate_id": candidate_id_final,
-            "evaluation": pipeline.get_full_evaluation(),
-            "final_recommendation": stage4['recommendation'],
-            "final_score": stage4['overall_score']
-        })
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Evaluation completion error: {str(e)}")
-
-@router.post("/evaluate/full")
-async def full_evaluation(
-    resume: UploadFile = File(...),
-    code_solution: str = Form(...),
-    job_description: str = Form(...),
-    ideal_candidate_profile: str = Form(...),
-    task_description: str = Form(...),
-    candidate_id: str = Form(...),
-    jd_id: str = Form(...),
     interview_videos: List[UploadFile] = File(...),
     mcq_answers: str = Form(...)
 ):
     """
-    Complete end-to-end evaluation in one API call.
-    USE THIS FOR TESTING.
+    STAGE 3 & 4: Process video + MCQ responses, generate final evaluation
     """
     try:
-        resume_text = extract_text_from_pdf(resume)
-        mcq_answers_list = json.loads(mcq_answers)
+        if candidate_id not in session_storage:
+            raise HTTPException(status_code=404, detail="Session not found")
         
+        pipeline = session_storage[candidate_id]
+        
+        print(f"\n🎬 Processing responses for {candidate_id}")
+        
+        # Read video files
         video_data_list = []
         for video_file in interview_videos:
             video_bytes = await video_file.read()
             video_data_list.append(video_bytes)
         
-        pipeline = CandidateEvaluationPipeline(
-            jd_text=job_description,
-            ideal_candidate_profile=ideal_candidate_profile,
-            task_description=task_description,
-            candidate_id=candidate_id,
-            jd_id=jd_id
-        )
+        # Parse MCQ answers
+        mcq_answers_list = json.loads(mcq_answers)
         
-        # Execute all stages
-        stage1 = pipeline.run_stage1(code_solution)
-        stage2 = pipeline.run_stage2(resume_text)
+        # STAGE 3: Transcribe videos + score MCQ
+        interview_questions = pipeline.get_interview_questions()
+        interview_transcripts = conduct_video_interview(interview_questions, video_data_list)
+        stage3_result = pipeline.run_stage3(interview_transcripts, mcq_answers_list)
         
-        interview_questions = stage1['interview_questions']
-        transcriptions = conduct_video_interview(interview_questions, video_data_list)
+        # STAGE 4: Gemini final analysis
+        stage4_result = pipeline.run_stage4()
         
-        stage3 = pipeline.run_stage3(transcriptions, mcq_answers_list)
-        stage4 = pipeline.run_stage4()
+        # Clean up session
+        del session_storage[candidate_id]
         
-        candidate_id_final = pipeline.complete()
+        print(f"✅ Evaluation complete for {candidate_id}\n")
         
         return JSONResponse({
             "status": "success",
-            "candidate_id": candidate_id_final,
-            "evaluation": pipeline.get_full_evaluation()
+            "candidate_id": candidate_id,
+            "overall_score": stage4_result['overall_score'],
+            "recommendation": stage4_result['recommendation'],
+            "summary": stage4_result['summary'],
+            "strengths": stage4_result['strengths'],
+            "weaknesses": stage4_result['weaknesses'],
+            "scores": {
+                "code_quality": pipeline.stage1_result['code_quality_score'],
+                "resume_fit": pipeline.stage2_result['resume_fit_score'],
+                "code_fit": pipeline.stage2_result['code_fit_score'],
+                "mcq": stage3_result['mcq_score'],
+                "video_interview": stage4_result['video_interview_score']
+            }
         })
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Full evaluation error: {str(e)}")
+        print(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Evaluation error: {str(e)}")
 
-@router.get("/evaluate/status/{candidate_id}")
-async def get_evaluation_status(candidate_id: str):
-    """Get current evaluation status for a candidate"""
+@app_router.get("/evaluate/status/{candidate_id}")
+async def get_status(candidate_id: str):
+    """Check evaluation status"""
     if candidate_id in session_storage:
         return JSONResponse({
             "status": "in_progress",
             "candidate_id": candidate_id
         })
-    else:
-        return JSONResponse({
-            "status": "not_found",
-            "message": "No active evaluation for this candidate"
-        })
+    return JSONResponse({
+        "status": "not_found"
+    })

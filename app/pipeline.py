@@ -1,17 +1,17 @@
+import json
 from typing import Dict, List
 from datetime import datetime
 from app.gemini_evaluator import (
     stage1_evaluate_code,
     stage4_final_analysis
 )
-from app.qdrant_scorer import (
-    get_vector_scores,
-    index_candidate
-)
-from app.mcq_scorer import calculate_mcq_score
+from app.qdrant_scorer import QdrantScorer
+from app.mcq_scorer import MCQScorer
 
 
 class CandidateEvaluationPipeline:
+    """Orchestrates the 4-stage evaluation pipeline"""
+    
     def __init__(
         self,
         jd_text: str,
@@ -25,6 +25,9 @@ class CandidateEvaluationPipeline:
         self.task_description = task_description
         self.candidate_id = candidate_id
         self.jd_id = jd_id
+        
+        self.qdrant_scorer = QdrantScorer()
+        self.mcq_scorer = MCQScorer()
         
         # Stage results storage
         self.stage1_result = None
@@ -43,6 +46,7 @@ class CandidateEvaluationPipeline:
         - Generates MCQ questions
         """
         print(f"\n[Stage 1] Evaluating code with Gemini...")
+        self.code_solution = code_solution
         
         self.stage1_result = stage1_evaluate_code(
             code_solution=code_solution,
@@ -56,30 +60,34 @@ class CandidateEvaluationPipeline:
         
         return self.stage1_result
     
-    def run_stage2(self, resume_text: str) -> Dict:
+    def run_stage2(self, resume_content: str) -> Dict:
         """
         Stage 2: Qdrant Vector Scoring
         - Calculates resume fit score (resume vs ideal candidate)
         - Calculates code fit score (task vs code description)
         """
         print(f"\n[Stage 2] Calculating vector similarity scores...")
+        self.resume_content = resume_content
         
-        if not self.stage1_result:
-            raise ValueError("Stage 1 must be completed before Stage 2")
+        code_description = self.stage1_result.get('code_description', '')
         
-        code_description = self.stage1_result['code_description']
-        
-        resume_fit_score, code_fit_score = get_vector_scores(
+        # Score resume fit
+        resume_fit_score = self.qdrant_scorer.score_resume_fit(
+            resume_text=resume_content,
             ideal_candidate_profile=self.ideal_candidate_profile,
-            candidate_resume=resume_text,
+            candidate_id=self.candidate_id
+        )
+        
+        # Score code fit
+        code_fit_score = self.qdrant_scorer.score_code_fit(
+            code_description=code_description,
             task_description=self.task_description,
-            code_description=code_description
+            candidate_id=self.candidate_id
         )
         
         self.stage2_result = {
-            'resume_fit_score': resume_fit_score,
-            'code_fit_score': code_fit_score,
-            'resume_text': resume_text
+            "resume_fit_score": resume_fit_score,
+            "code_fit_score": code_fit_score
         }
         
         print(f"✓ Resume Fit Score: {resume_fit_score}/100")
@@ -94,22 +102,21 @@ class CandidateEvaluationPipeline:
         - Calculates MCQ score
         """
         print(f"\n[Stage 3] Processing interview and MCQ responses...")
+        self.interview_transcripts = interview_transcripts
+        self.mcq_answers = mcq_answers
         
-        if not self.stage1_result:
-            raise ValueError("Stage 1 must be completed before Stage 3")
-        
-        # Calculate MCQ score
-        mcq_result = calculate_mcq_score(
+        # Score MCQ
+        mcq_score = self.mcq_scorer.score_mcq_answers(
             mcq_questions=self.stage1_result['mcq_questions'],
-            candidate_answers=mcq_answers
+            user_answers=mcq_answers
         )
         
         self.stage3_result = {
-            'interview_transcripts': interview_transcripts,
-            'mcq_result': mcq_result
+            "mcq_score": mcq_score,
+            "interview_transcripts": interview_transcripts
         }
         
-        print(f"✓ MCQ Score: {mcq_result['mcq_score']}/100")
+        print(f"✓ MCQ Score: {mcq_score}/100")
         print(f"✓ Correct Answers: {mcq_result['correct_count']}/{mcq_result['total_count']}")
         print(f"✓ Interview Responses: {len(interview_transcripts)} transcripts")
         
@@ -124,20 +131,26 @@ class CandidateEvaluationPipeline:
         """
         print(f"\n[Stage 4] Generating final comprehensive analysis...")
         
-        if not all([self.stage1_result, self.stage2_result, self.stage3_result]):
-            raise ValueError("All previous stages must be completed before Stage 4")
+        # Collect all scores
+        code_quality_score = self.stage1_result['code_quality_score']
+        resume_fit_score = self.stage2_result['resume_fit_score']
+        code_fit_score = self.stage2_result['code_fit_score']
+        mcq_score = self.stage3_result['mcq_score']
         
+        interview_questions = self.stage1_result['interview_questions']
+        
+        # Call Gemini for final analysis
         self.stage4_result = stage4_final_analysis(
             jd_text=self.jd_text,
-            resume_text=self.stage2_result['resume_text'],
-            code_solution="",  # Not needed for final analysis
+            resume_text=self.resume_content,
+            code_solution=self.code_solution,
             task_description=self.task_description,
-            resume_fit_score=self.stage2_result['resume_fit_score'],
-            code_fit_score=self.stage2_result['code_fit_score'],
-            code_quality_score=self.stage1_result['code_quality_score'],
-            mcq_score=self.stage3_result['mcq_result']['mcq_score'],
-            interview_questions=self.stage1_result['interview_questions'],
-            interview_transcripts=self.stage3_result['interview_transcripts']
+            resume_fit_score=resume_fit_score,
+            code_fit_score=code_fit_score,
+            code_quality_score=code_quality_score,
+            mcq_score=mcq_score,
+            interview_questions=interview_questions,
+            interview_transcripts=self.interview_transcripts
         )
         
         print(f"✓ Overall Score: {self.stage4_result['overall_score']}/100")

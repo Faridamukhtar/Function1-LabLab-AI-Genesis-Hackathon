@@ -3,8 +3,8 @@ import numpy as np
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import PointStruct, Distance, VectorParams
-from uuid import uuid4
+from qdrant_client.models import Distance, VectorParams, PointStruct
+import uuid
 
 load_dotenv()
 
@@ -67,3 +67,118 @@ def search_candidates(jd_text, limit=5):
         with_payload=True
     )
     return [hit.payload for hit in results]
+
+class QdrantScorer:
+    """Handles Qdrant vector scoring for resume fit and code fit"""
+    
+    def __init__(self):
+        # Connect to local Qdrant (or use cloud)
+        self.client = QdrantClient(":memory:")  # Use file-based for persistence: host="localhost", port=6333
+        self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        
+        # Initialize collections
+        self._init_collections()
+    
+    def _init_collections(self):
+        """Initialize Qdrant collections for resume and code"""
+        try:
+            self.client.create_collection(
+                collection_name="resume_fit",
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+            )
+        except:
+            pass  # Collection already exists
+        
+        try:
+            self.client.create_collection(
+                collection_name="code_fit",
+                vectors_config=VectorParams(size=384, distance=Distance.COSINE)
+            )
+        except:
+            pass
+    
+    def score_resume_fit(self, resume_text, ideal_candidate_profile, candidate_id):
+        """
+        Score how well candidate resume matches ideal candidate profile
+        Returns: 1-100 score
+        """
+        # Embed resume and ideal profile
+        resume_embedding = self.embedding_model.encode(resume_text).tolist()
+        ideal_embedding = self.embedding_model.encode(ideal_candidate_profile).tolist()
+        
+        # Store resume vector
+        point_id = int(uuid.uuid4().int % (2**63))
+        self.client.upsert(
+            collection_name="resume_fit",
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector=resume_embedding,
+                    payload={
+                        "candidate_id": candidate_id,
+                        "type": "resume",
+                        "text": resume_text[:500]
+                    }
+                )
+            ]
+        )
+        
+        # Search against ideal profile
+        results = self.client.search(
+            collection_name="resume_fit",
+            query_vector=ideal_embedding,
+            limit=1
+        )
+        
+        # Convert similarity score (0-1) to 1-100
+        if results:
+            similarity = results[0].score  # Cosine similarity: -1 to 1
+            score = max(1, min(100, int((similarity + 1) / 2 * 100)))  # Normalize to 1-100
+        else:
+            score = 50
+        
+        print(f"   Resume Fit: {score}/100 (similarity: {similarity if results else 'N/A'})")
+        return score
+    
+    def score_code_fit(self, code_description, task_description, candidate_id):
+        """
+        Score how well submitted code matches the task
+        Returns: 1-100 score
+        """
+        # Embed code and task
+        code_embedding = self.embedding_model.encode(code_description).tolist()
+        task_embedding = self.embedding_model.encode(task_description).tolist()
+        
+        # Store code vector
+        point_id = int(uuid.uuid4().int % (2**63))
+        self.client.upsert(
+            collection_name="code_fit",
+            points=[
+                PointStruct(
+                    id=point_id,
+                    vector=code_embedding,
+                    payload={
+                        "candidate_id": candidate_id,
+                        "type": "code",
+                        "text": code_description[:500]
+                    }
+                )
+            ]
+        )
+        
+        # Search against task
+        results = self.client.search(
+            collection_name="code_fit",
+            query_vector=task_embedding,
+            limit=1
+        )
+        
+        # Convert similarity score to 1-100
+        if results:
+            similarity = results[0].score
+            score = max(1, min(100, int((similarity + 1) / 2 * 100)))
+        else:
+            score = 50
+        
+        print(f"   Code Fit: {score}/100 (similarity: {similarity if results else 'N/A'})")
+        return score
