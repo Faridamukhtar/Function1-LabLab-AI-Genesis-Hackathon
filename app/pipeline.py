@@ -120,6 +120,7 @@ class CandidateEvaluationPipeline:
             task_description=self.task_description,
             candidate_id=self.candidate_id
         )
+        
         print(f"   ✅ Code Fit Score: {self.code_fit_score}/100")
         
         print(f"\n{'='*60}")

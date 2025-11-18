@@ -920,21 +920,66 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
   // Load audio when question changes
   useEffect(() => {
     const q = interviewQuestions[currentQuestion];
-    if (q?.audio_base64) {
-      const url = createAudioUrl(q.audio_base64, q.mime_type);
-      setAudioUrl(url);
-    } else {
+    if (!q?.audio_base64) {
       setAudioUrl(null);
+      setIsPlaying(false);
+      return;
     }
+
+    // Clean up previous audio URL
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+    }
+
+    const url = createAudioUrl(q.audio_base64, q.mime_type);
+    setAudioUrl(url);
+    setIsPlaying(false);
+
+    // Cleanup on unmount
+    return () => {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    };
   }, [currentQuestion, interviewQuestions]);
 
-  const handlePlayAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.play();
+  const handlePlayAudio = async () => {
+    if (!audioRef.current || !audioUrl) {
+      console.log("Audio not ready");
+      return;
+    }
+
+    try {
+      // Stop if currently playing
+      if (isPlaying) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        setIsPlaying(false);
+        return;
+      }
+
+      // Reset and play
+      audioRef.current.currentTime = 0;
+      await audioRef.current.play();
       setIsPlaying(true);
-      audioRef.current.onended = () => setIsPlaying(false);
+    } catch (err) {
+      console.warn("Audio play error:", err);
+      setIsPlaying(false);
     }
   };
+
+  // Handle audio end
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleEnded = () => setIsPlaying(false);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("ended", handleEnded);
+    };
+  }, []);
 
   const startRecording = async () => {
     try {
@@ -1082,11 +1127,19 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
                       onClick={handlePlayAudio}
                       className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition flex items-center"
                     >
-                      <Volume2 className="w-5 h-5 mr-2" />
-                      {isPlaying ? "Playing..." : "Play AI Audio"}
+                      {isPlaying ? (
+                        <>
+                          <Square className="w-5 h-5 mr-2" />
+                          Stop Audio
+                        </>
+                      ) : (
+                        <>
+                          <Volume2 className="w-5 h-5 mr-2" />
+                          Play AI Audio
+                        </>
+                      )}
                     </button>
-
-                    <audio ref={audioRef} src={audioUrl} />
+                    <audio ref={audioRef} src={audioUrl} preload="auto" />
                   </div>
                 )}
               </div>

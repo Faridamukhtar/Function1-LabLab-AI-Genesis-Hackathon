@@ -5,18 +5,8 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-import google.generativeai as genai
 
 load_dotenv()
-
-# ------------------------------------------
-# GEMINI CONFIG (FREE TIER)
-# ------------------------------------------
-GENAI_API_KEY = os.getenv("GENAI_API_KEY")
-genai.configure(api_key=GENAI_API_KEY)
-
-PDF_MODEL = genai.GenerativeModel("gemini-flash-latest")
-
 
 # ------------------------------------------
 # EMBEDDINGS
@@ -26,7 +16,7 @@ VECTOR_DIM = EMBEDDING_MODEL.get_sentence_embedding_dimension()
 
 
 # ------------------------------------------
-# OPTIONAL: QDRANT (for SEARCH, NOT SCORING)
+# QDRANT SETUP
 # ------------------------------------------
 qdrant_url = os.getenv("QDRANT_URL")
 qdrant_api_key = os.getenv("QDRANT_API_KEY")
@@ -40,48 +30,55 @@ if qdrant_url and qdrant_api_key:
             collection_name=COLLECTION,
             vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE)
         )
+    
+    # Create code_fit collection if it doesn't exist
+    if not qdrant_client.collection_exists("code_fit"):
+        qdrant_client.create_collection(
+            collection_name="code_fit",
+            vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE)
+        )
 else:
     print("⚠️ Qdrant cloud not configured - running without persistent storage")
     qdrant_client = None
 
 
 # ------------------------------------------
-# PDF TEXT EXTRACTION
+# PDF TEXT EXTRACTION (Simple)
 # ------------------------------------------
 def extract_resume_text_from_pdf(resume_bytes: bytes) -> str:
+    """
+    Extract text from PDF using PyPDF2 or pdfplumber
+    Install: pip install PyPDF2
+    """
     print(f"   📄 Extracting text from PDF resume...")
-
+    
     try:
-        response = PDF_MODEL.generate_content(
-            [
-                {"mime_type": "application/pdf", "data": resume_bytes},
-                """
-                Extract all text from this PDF. Return only raw text.
-                Maintain order. No comments. No analysis.
-                """
-            ],
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 3000
-            }
-        )
-
-        text = response.text.strip()
-
+        import io
+        from PyPDF2 import PdfReader
+        
+        pdf_file = io.BytesIO(resume_bytes)
+        reader = PdfReader(pdf_file)
+        
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        
+        text = text.strip()
+        
         if not text or len(text) < 50:
             print("   ⚠️ Resume extraction too short")
             return "Resume content could not be extracted properly"
-
+        
         print(f"   ✅ Extracted {len(text)} characters")
         return text
-
+        
     except Exception as e:
-        print(f"   ❌ Gemini PDF error: {str(e)}")
+        print(f"   ❌ PDF extraction error: {str(e)}")
         return "Resume content could not be extracted"
 
 
 # ------------------------------------------
-# OPTIONAL: INDEX CANDIDATE IN QDRANT
+# INDEX CANDIDATE IN QDRANT
 # ------------------------------------------
 def index_candidate(final_analysis: dict, candidate_id: str = None):
     if not qdrant_client:
@@ -108,7 +105,7 @@ def index_candidate(final_analysis: dict, candidate_id: str = None):
 
 
 # ------------------------------------------
-# OPTIONAL: SEARCH CANDIDATES
+# SEARCH CANDIDATES
 # ------------------------------------------
 def search_candidates(jd_text: str, limit: int = 5):
     if not qdrant_client:
@@ -129,137 +126,169 @@ def search_candidates(jd_text: str, limit: int = 5):
 
 
 # ==========================================================
-# 🚀 FIXED SCORER — NO MORE QDRANT MISSCORING
+# 🚀 EMBEDDING-BASED SCORER (NO GEMINI)
 # ==========================================================
 class QdrantScorer:
     """
-    Balanced Scorer:
-    - Gemini semantic relevance (60%)
-    - Qdrant embedding alignment (20%)
-    - Irrelevance Penalization (20%)
+    Pure embedding-based scoring using semantic similarity
+    - Uses sentence transformers for all scoring
+    - No external API calls needed
     """
 
     def __init__(self):
         self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.client = qdrant_client
 
     # ------------------------------------------------------
-    # Resume extraction through Gemini
+    # Resume extraction (simple PDF parsing)
     # ------------------------------------------------------
     def _extract_resume_text(self, resume_bytes):
         try:
-            resp = PDF_MODEL.generate_content(
-                [
-                    {"mime_type": "application/pdf", "data": resume_bytes},
-                    "Extract all technical and experience-related content."
-                ],
-                generation_config={"temperature": 0.1}
-            )
-            return resp.text.strip()
-        except:
+            import io
+            from PyPDF2 import PdfReader
+            
+            pdf_file = io.BytesIO(resume_bytes)
+            reader = PdfReader(pdf_file)
+            
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() + "\n"
+            
+            text = text.strip()
+            print(f"   📄 Extracted {len(text)} characters from resume")
+            return text
+        except Exception as e:
+            print(f"   ❌ Extraction error: {str(e)}")
             return ""
 
     # ------------------------------------------------------
-    # Gemini semantic relevance (0–100)
+    # Semantic similarity score (0-100)
     # ------------------------------------------------------
-    def _gemini_relevance_score(self, jd, resume_text):
-        prompt = f"""
-Evaluate how well this resume matches this job description.
-
-JOB DESCRIPTION:
-{jd}
-
-RESUME:
-{resume_text}
-
-Criteria:
-- React experience
-- JavaScript, HTML, CSS
-- UI/Frontend development
-- Project relevance to frontend
-- Experience depth and recency
-
-Return a number from 1 to 100 only.
-"""
+    def _semantic_similarity_score(self, text1, text2):
+        """
+        Calculate semantic similarity between two texts
+        Returns score from 1-100
+        """
         try:
-            resp = PDF_MODEL.generate_content(
-                prompt, generation_config={"temperature": 0.0, "max_output_tokens": 20}
-            )
-            num = ''.join(c for c in resp.text if c.isdigit())
-            return max(1, min(100, int(num))) if num else 50
+            vec1 = self.embedding_model.encode(text1)
+            vec2 = self.embedding_model.encode(text2)
+            sim = float(cos_sim(vec1, vec2))  # -1 to 1
+            score = int(((sim + 1) / 2) * 100)  # Convert to 1-100
+            return max(1, min(100, score))
+        except Exception as e:
+            print(f"   ⚠️ Similarity calculation error: {str(e)}")
+            return 50
+
+    # ------------------------------------------------------
+    # Key skills matching score (0-100)
+    # ------------------------------------------------------
+    def _skills_match_score(self, jd, resume_text):
+        """
+        Extract and compare key technical terms
+        """
+        try:
+            # Simple keyword extraction (can be enhanced)
+            jd_lower = jd.lower()
+            resume_lower = resume_text.lower()
+            
+            # Common tech keywords
+            keywords = [
+                'python', 'java', 'javascript', 'react', 'node', 'aws', 'docker',
+                'kubernetes', 'sql', 'nosql', 'api', 'machine learning', 'ai',
+                'data', 'cloud', 'agile', 'git', 'ci/cd', 'testing'
+            ]
+            
+            matches = sum(1 for kw in keywords if kw in jd_lower and kw in resume_lower)
+            jd_keywords = sum(1 for kw in keywords if kw in jd_lower)
+            
+            if jd_keywords == 0:
+                return 50
+            
+            score = int((matches / jd_keywords) * 100)
+            return max(1, min(100, score))
         except:
             return 50
 
     # ------------------------------------------------------
-    # Qdrant vector alignment score (0–100)
-    # ------------------------------------------------------
-    def _embedding_alignment(self, jd, resume_text):
-        try:
-            jd_vec = self.embedding_model.encode(jd)
-            cv_vec = self.embedding_model.encode(resume_text)
-            sim = float(cos_sim(jd_vec, cv_vec))  # -1..1
-            score = int(((sim + 1) / 2) * 100)
-            return max(1, min(100, score))
-        except:
-            return 40
-
-    # ------------------------------------------------------
-    # PENALIZATION SCORE (0–100)
-    # ------------------------------------------------------
-    def _penalty_score(self, jd, resume_text):
-        resume_lower = resume_text.lower()
-        jd_lower = jd.lower()
-
-        penalties = 0
-
-        # Missing core keywords
-        must_have = ["react", "javascript", "html", "css", "frontend", "ui"]
-        for kw in must_have:
-            if kw in jd_lower and kw not in resume_lower:
-                penalties += 8     # soft penalty
-
-        # Too short
-        if len(resume_text) < 200:
-            penalties += 15
-
-        # Generic filler / no projects
-        if "project" not in resume_lower:
-            penalties += 10
-
-        # Penalty cannot exceed 70 (to avoid overkill)
-        penalties = min(penalties, 70)
-
-        # Convert to penalty score 0–100 (higher = better)
-        penalty_score = 100 - penalties
-        return max(10, penalty_score)
-
-    # ------------------------------------------------------
-    # FINAL SCORE (balanced)
+    # FINAL RESUME FIT SCORE (balanced)
     # ------------------------------------------------------
     def score_resume_fit(self, resume_bytes, ideal_candidate_profile, candidate_id=None):
-        print("\n   📊 Balanced Resume Scoring (Gemini + Qdrant + penalties)…")
-
+        """
+        Score resume against job description
+        Returns: 1-100 score
+        """
+        print(f"   📊 Scoring resume fit...")
+        
         resume_text = self._extract_resume_text(resume_bytes)
         if not resume_text:
             print("   ❌ No text extracted → default 35")
             return 35
 
-        # Components
-        relevance = self._gemini_relevance_score(ideal_candidate_profile, resume_text)
-        embedding = self._embedding_alignment(ideal_candidate_profile, resume_text)
-        penalty = self._penalty_score(ideal_candidate_profile, resume_text)
+        # Calculate components
+        semantic_score = self._semantic_similarity_score(ideal_candidate_profile, resume_text)
+        skills_score = self._skills_match_score(ideal_candidate_profile, resume_text)
 
-        # Final weighted score
-        final = int(
-            (relevance * 0.6) +
-            (embedding * 0.2) +
-            (penalty * 0.2)
-        )
-
+        # Weighted final score
+        # 70% semantic similarity, 30% skills match
+        final = int((semantic_score * 0.7) + (skills_score * 0.3))
         final = max(1, min(100, final))
 
-        print(f"      Gemini relevance: {relevance}")
-        print(f"      Vector alignment: {embedding}")
-        print(f"      Penalty score:    {penalty}")
-        print(f"   ✅ Final Resume Score → {final}/100")
+        print(f"   ✅ Semantic: {semantic_score}/100, Skills: {skills_score}/100")
+        print(f"   🎯 Final Score: {final}/100")
 
         return final
+
+    # ------------------------------------------------------
+    # CODE FIT SCORING
+    # ------------------------------------------------------
+    def score_code_fit(self, code_description, task_description, candidate_id):
+        """
+        Score how well submitted code matches the task
+        Returns: 1-100 score
+        """
+        if not self.client:
+            print("   ⚠️ Qdrant not configured, using direct similarity")
+            return self._semantic_similarity_score(code_description, task_description)
+        
+        try:
+            # Embed code and task
+            code_embedding = self.embedding_model.encode(code_description).tolist()
+            task_embedding = self.embedding_model.encode(task_description).tolist()
+
+            # Store code vector
+            point_id = int(uuid.uuid4().int % (2**63))
+            self.client.upsert(
+                collection_name="code_fit",
+                points=[
+                    PointStruct(
+                        id=point_id,
+                        vector=code_embedding,
+                        payload={
+                            "candidate_id": candidate_id,
+                            "type": "code",
+                            "text": code_description[:500],
+                        },
+                    )
+                ],
+            )
+
+            # Search against task
+            results = self.client.search(
+                collection_name="code_fit", 
+                query_vector=task_embedding, 
+                limit=1
+            )
+
+            # Convert similarity score to 1-100
+            if results:
+                similarity = results[0].score
+                score = max(1, min(100, int((similarity + 1) / 2 * 100)))
+            else:
+                score = 50
+
+            print(f"   🎯 Code Fit: {score}/100 (similarity: {similarity if results else 'N/A'})")
+            return score
+
+        except Exception as e:
+            print(f"   ⚠️ Code fit scoring error: {str(e)}")
+            return 50

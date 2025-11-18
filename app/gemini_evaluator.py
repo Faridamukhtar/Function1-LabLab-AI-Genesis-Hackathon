@@ -118,7 +118,7 @@ CANDIDATE'S CODE SUBMISSION:
 Please analyze this code submission and provide:
 
 1. **code_quality_score** (1-100): Rate the code based on:
-   - Functionality (does it solve the task correctly?)
+   - Functionality (does it solve the task correctly? -> PENALIZE HEAVILY OF JOB DESCRIPTION)
    - Code structure and readability
    - Error handling and edge cases
    - Performance and efficiency
