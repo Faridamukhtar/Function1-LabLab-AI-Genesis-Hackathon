@@ -1,198 +1,265 @@
 import os
-import numpy as np
+import uuid
 from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
+from sentence_transformers.util import cos_sim
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
-import uuid
+import google.generativeai as genai
 
 load_dotenv()
 
+# ------------------------------------------
+# GEMINI CONFIG (FREE TIER)
+# ------------------------------------------
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+genai.configure(api_key=GENAI_API_KEY)
+
+PDF_MODEL = genai.GenerativeModel("gemini-flash-latest")
+
+
+# ------------------------------------------
+# EMBEDDINGS
+# ------------------------------------------
 EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
 VECTOR_DIM = EMBEDDING_MODEL.get_sentence_embedding_dimension()
 
-qdrant_client = QdrantClient(
-    url=os.getenv("QDRANT_URL"),
-    api_key=os.getenv("QDRANT_API_KEY")
-)
 
-COLLECTION = "candidates"
+# ------------------------------------------
+# OPTIONAL: QDRANT (for SEARCH, NOT SCORING)
+# ------------------------------------------
+qdrant_url = os.getenv("QDRANT_URL")
+qdrant_api_key = os.getenv("QDRANT_API_KEY")
 
-if not qdrant_client.collection_exists(COLLECTION):
-    qdrant_client.create_collection(
-        collection_name=COLLECTION,
-        vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE)
-    )
+if qdrant_url and qdrant_api_key:
+    qdrant_client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+    COLLECTION = "candidates"
 
-def calculate_similarity(text_a, text_b):
-    if not text_a or not text_b:
-        return 0
-    embeddings = EMBEDDING_MODEL.encode([text_a, text_b])
-    similarity = np.dot(embeddings[0], embeddings[1])
-    return int(np.clip(similarity * 100, 1, 100))
+    if not qdrant_client.collection_exists(COLLECTION):
+        qdrant_client.create_collection(
+            collection_name=COLLECTION,
+            vectors_config=VectorParams(size=VECTOR_DIM, distance=Distance.COSINE)
+        )
+else:
+    print("⚠️ Qdrant cloud not configured - running without persistent storage")
+    qdrant_client = None
 
-def get_vector_scores(ideal_candidate_profile, candidate_resume, 
-                      task_description, code_description):
-    resume_fit_score = calculate_similarity(ideal_candidate_profile, candidate_resume)
-    code_fit_score = calculate_similarity(task_description, code_description)
-    return resume_fit_score, code_fit_score
 
-def index_candidate(final_analysis, candidate_id=None):
-    if not candidate_id:
-        candidate_id = str(uuid4())
-    
-    summary = final_analysis.get("summary", "")
-    embedding_vector = EMBEDDING_MODEL.encode(summary).tolist()
-    
-    point = PointStruct(
-        id=candidate_id,
-        vector=embedding_vector,
-        payload=final_analysis
-    )
-    
-    qdrant_client.upsert(
-        collection_name=COLLECTION,
-        points=[point],
-        wait=True
-    )
-    
-    return candidate_id
+# ------------------------------------------
+# PDF TEXT EXTRACTION
+# ------------------------------------------
+def extract_resume_text_from_pdf(resume_bytes: bytes) -> str:
+    print(f"   📄 Extracting text from PDF resume...")
 
-def search_candidates(jd_text, limit=5):
-    query_vector = EMBEDDING_MODEL.encode(jd_text).tolist()
-    results = qdrant_client.search(
-        collection_name=COLLECTION,
-        query_vector=query_vector,
-        limit=limit,
-        with_payload=True
-    )
-    return [hit.payload for hit in results]
+    try:
+        response = PDF_MODEL.generate_content(
+            [
+                {"mime_type": "application/pdf", "data": resume_bytes},
+                """
+                Extract all text from this PDF. Return only raw text.
+                Maintain order. No comments. No analysis.
+                """
+            ],
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 3000
+            }
+        )
 
+        text = response.text.strip()
+
+        if not text or len(text) < 50:
+            print("   ⚠️ Resume extraction too short")
+            return "Resume content could not be extracted properly"
+
+        print(f"   ✅ Extracted {len(text)} characters")
+        return text
+
+    except Exception as e:
+        print(f"   ❌ Gemini PDF error: {str(e)}")
+        return "Resume content could not be extracted"
+
+
+# ------------------------------------------
+# OPTIONAL: INDEX CANDIDATE IN QDRANT
+# ------------------------------------------
+def index_candidate(final_analysis: dict, candidate_id: str = None):
+    if not qdrant_client:
+        return candidate_id or str(uuid.uuid4())
+
+    candidate_id = candidate_id or str(uuid.uuid4())
+
+    try:
+        summary = final_analysis.get("summary", "")
+        embedding = EMBEDDING_MODEL.encode(summary).tolist()
+
+        qdrant_client.upsert(
+            collection_name=COLLECTION,
+            points=[PointStruct(id=candidate_id, vector=embedding, payload=final_analysis)],
+            wait=True
+        )
+
+        print(f"   ✅ Indexed candidate {candidate_id}")
+        return candidate_id
+
+    except Exception as e:
+        print(f"   ⚠️ Indexing failed: {str(e)}")
+        return candidate_id
+
+
+# ------------------------------------------
+# OPTIONAL: SEARCH CANDIDATES
+# ------------------------------------------
+def search_candidates(jd_text: str, limit: int = 5):
+    if not qdrant_client:
+        return []
+
+    try:
+        query_vector = EMBEDDING_MODEL.encode(jd_text).tolist()
+        results = qdrant_client.search(
+            collection_name=COLLECTION,
+            query_vector=query_vector,
+            limit=limit,
+            with_payload=True
+        )
+        return [hit.payload for hit in results]
+    except Exception as e:
+        print(f"   ⚠️ Search failed: {str(e)}")
+        return []
+
+
+# ==========================================================
+# 🚀 FIXED SCORER — NO MORE QDRANT MISSCORING
+# ==========================================================
 class QdrantScorer:
-    """Handles Qdrant vector scoring for resume fit and code fit"""
+    """
+    Balanced Scorer:
+    - Gemini semantic relevance (60%)
+    - Qdrant embedding alignment (20%)
+    - Irrelevance Penalization (20%)
+    """
 
     def __init__(self):
-        # In-memory client (switch to host/port for production)
-        self.client = QdrantClient(":memory:")
         self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-        # Initialize collections
-        self._init_collections()
-
-    def _init_collections(self):
-        """Initialize Qdrant collections"""
+    # ------------------------------------------------------
+    # Resume extraction through Gemini
+    # ------------------------------------------------------
+    def _extract_resume_text(self, resume_bytes):
         try:
-            self.client.create_collection(
-                collection_name="resume_fit",
-                vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-            )
-        except:
-            pass  # Collection already exists
-
-        try:
-            self.client.create_collection(
-                collection_name="code_fit",
-                vectors_config=VectorParams(size=384, distance=Distance.COSINE),
-            )
-        except:
-            pass
-
-    def score_resume_fit(
-        self, resume_text, ideal_candidate_profile, candidate_id
-    ):
-        """
-        Score how well candidate resume matches ideal profile
-        Returns: 1-100 score
-        """
-        try:
-            # Embed resume and ideal profile
-            resume_embedding = self.embedding_model.encode(resume_text).tolist()
-            ideal_embedding = self.embedding_model.encode(
-                ideal_candidate_profile
-            ).tolist()
-
-            # Store resume vector
-            point_id = int(uuid.uuid4().int % (2**63))
-            self.client.upsert(
-                collection_name="resume_fit",
-                points=[
-                    PointStruct(
-                        id=point_id,
-                        vector=resume_embedding,
-                        payload={
-                            "candidate_id": candidate_id,
-                            "type": "resume",
-                            "text": resume_text[:500],
-                        },
-                    )
+            resp = PDF_MODEL.generate_content(
+                [
+                    {"mime_type": "application/pdf", "data": resume_bytes},
+                    "Extract all technical and experience-related content."
                 ],
+                generation_config={"temperature": 0.1}
             )
+            return resp.text.strip()
+        except:
+            return ""
 
-            # Search against ideal profile
-            results = self.client.search(
-                collection_name="resume_fit", query_vector=ideal_embedding, limit=1
+    # ------------------------------------------------------
+    # Gemini semantic relevance (0–100)
+    # ------------------------------------------------------
+    def _gemini_relevance_score(self, jd, resume_text):
+        prompt = f"""
+Evaluate how well this resume matches this job description.
+
+JOB DESCRIPTION:
+{jd}
+
+RESUME:
+{resume_text}
+
+Criteria:
+- React experience
+- JavaScript, HTML, CSS
+- UI/Frontend development
+- Project relevance to frontend
+- Experience depth and recency
+
+Return a number from 1 to 100 only.
+"""
+        try:
+            resp = PDF_MODEL.generate_content(
+                prompt, generation_config={"temperature": 0.0, "max_output_tokens": 20}
             )
-
-            # Convert similarity score (0-1) to 1-100
-            if results:
-                similarity = results[0].score  # Cosine similarity: -1 to 1
-                score = max(1, min(100, int((similarity + 1) / 2 * 100)))
-            else:
-                score = 50
-
-            print(
-                f"   Resume Fit: {score}/100 (similarity: {similarity if results else 'N/A'})"
-            )
-            return score
-
-        except Exception as e:
-            print(f"⚠️  Resume fit scoring error: {str(e)}")
+            num = ''.join(c for c in resp.text if c.isdigit())
+            return max(1, min(100, int(num))) if num else 50
+        except:
             return 50
 
-    def score_code_fit(self, code_description, task_description, candidate_id):
-        """
-        Score how well submitted code matches the task
-        Returns: 1-100 score
-        """
+    # ------------------------------------------------------
+    # Qdrant vector alignment score (0–100)
+    # ------------------------------------------------------
+    def _embedding_alignment(self, jd, resume_text):
         try:
-            # Embed code and task
-            code_embedding = self.embedding_model.encode(code_description).tolist()
-            task_embedding = self.embedding_model.encode(task_description).tolist()
+            jd_vec = self.embedding_model.encode(jd)
+            cv_vec = self.embedding_model.encode(resume_text)
+            sim = float(cos_sim(jd_vec, cv_vec))  # -1..1
+            score = int(((sim + 1) / 2) * 100)
+            return max(1, min(100, score))
+        except:
+            return 40
 
-            # Store code vector
-            point_id = int(uuid.uuid4().int % (2**63))
-            self.client.upsert(
-                collection_name="code_fit",
-                points=[
-                    PointStruct(
-                        id=point_id,
-                        vector=code_embedding,
-                        payload={
-                            "candidate_id": candidate_id,
-                            "type": "code",
-                            "text": code_description[:500],
-                        },
-                    )
-                ],
-            )
+    # ------------------------------------------------------
+    # PENALIZATION SCORE (0–100)
+    # ------------------------------------------------------
+    def _penalty_score(self, jd, resume_text):
+        resume_lower = resume_text.lower()
+        jd_lower = jd.lower()
 
-            # Search against task
-            results = self.client.search(
-                collection_name="code_fit", query_vector=task_embedding, limit=1
-            )
+        penalties = 0
 
-            # Convert similarity score to 1-100
-            if results:
-                similarity = results[0].score
-                score = max(1, min(100, int((similarity + 1) / 2 * 100)))
-            else:
-                score = 50
+        # Missing core keywords
+        must_have = ["react", "javascript", "html", "css", "frontend", "ui"]
+        for kw in must_have:
+            if kw in jd_lower and kw not in resume_lower:
+                penalties += 8     # soft penalty
 
-            print(
-                f"   Code Fit: {score}/100 (similarity: {similarity if results else 'N/A'})"
-            )
-            return score
+        # Too short
+        if len(resume_text) < 200:
+            penalties += 15
 
-        except Exception as e:
-            print(f"⚠️  Code fit scoring error: {str(e)}")
-            return 50
+        # Generic filler / no projects
+        if "project" not in resume_lower:
+            penalties += 10
+
+        # Penalty cannot exceed 70 (to avoid overkill)
+        penalties = min(penalties, 70)
+
+        # Convert to penalty score 0–100 (higher = better)
+        penalty_score = 100 - penalties
+        return max(10, penalty_score)
+
+    # ------------------------------------------------------
+    # FINAL SCORE (balanced)
+    # ------------------------------------------------------
+    def score_resume_fit(self, resume_bytes, ideal_candidate_profile, candidate_id=None):
+        print("\n   📊 Balanced Resume Scoring (Gemini + Qdrant + penalties)…")
+
+        resume_text = self._extract_resume_text(resume_bytes)
+        if not resume_text:
+            print("   ❌ No text extracted → default 35")
+            return 35
+
+        # Components
+        relevance = self._gemini_relevance_score(ideal_candidate_profile, resume_text)
+        embedding = self._embedding_alignment(ideal_candidate_profile, resume_text)
+        penalty = self._penalty_score(ideal_candidate_profile, resume_text)
+
+        # Final weighted score
+        final = int(
+            (relevance * 0.6) +
+            (embedding * 0.2) +
+            (penalty * 0.2)
+        )
+
+        final = max(1, min(100, final))
+
+        print(f"      Gemini relevance: {relevance}")
+        print(f"      Vector alignment: {embedding}")
+        print(f"      Penalty score:    {penalty}")
+        print(f"   ✅ Final Resume Score → {final}/100")
+
+        return final

@@ -54,7 +54,8 @@ const LandingPage = ({ onSelectType }) => {
             AI Micro-Apprenticeship Platform
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Revolutionizing hiring with AI-powered evaluations and video interviews
+            Revolutionizing hiring with AI-powered evaluations and video
+            interviews
           </p>
         </div>
 
@@ -67,23 +68,31 @@ const LandingPage = ({ onSelectType }) => {
             <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-blue-200 transition">
               <Briefcase className="w-8 h-8 text-blue-600" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">For Companies</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              For Companies
+            </h2>
             <p className="text-gray-600 mb-6">
-              Create positions, design coding challenges, and find top talent with
-              AI-assisted evaluation
+              Create positions, design coding challenges, and find top talent
+              with AI-assisted evaluation
             </p>
             <ul className="space-y-3 mb-6">
               <li className="flex items-start">
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                <span className="text-gray-700">Post positions & coding tasks</span>
+                <span className="text-gray-700">
+                  Post positions & coding tasks
+                </span>
               </li>
               <li className="flex items-start">
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                <span className="text-gray-700">AI evaluates candidates automatically</span>
+                <span className="text-gray-700">
+                  AI evaluates candidates automatically
+                </span>
               </li>
               <li className="flex items-start">
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                <span className="text-gray-700">Review comprehensive candidate reports</span>
+                <span className="text-gray-700">
+                  Review comprehensive candidate reports
+                </span>
               </li>
             </ul>
             <button className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 transition">
@@ -99,10 +108,12 @@ const LandingPage = ({ onSelectType }) => {
             <div className="w-16 h-16 bg-purple-100 rounded-xl flex items-center justify-center mb-6 group-hover:bg-purple-200 transition">
               <Users className="w-8 h-8 text-purple-600" />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">For Candidates</h2>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">
+              For Candidates
+            </h2>
             <p className="text-gray-600 mb-6">
-              Browse opportunities, solve challenges, and showcase your skills through
-              AI-powered interviews
+              Browse opportunities, solve challenges, and showcase your skills
+              through AI-powered interviews
             </p>
             <ul className="space-y-3 mb-6">
               <li className="flex items-start">
@@ -111,7 +122,9 @@ const LandingPage = ({ onSelectType }) => {
               </li>
               <li className="flex items-start">
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
-                <span className="text-gray-700">Complete coding challenges</span>
+                <span className="text-gray-700">
+                  Complete coding challenges
+                </span>
               </li>
               <li className="flex items-start">
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2 mt-0.5 flex-shrink-0" />
@@ -136,7 +149,9 @@ const CompanyFlow = ({ onBack }) => {
       <div className="max-w-7xl mx-auto px-4 py-12">
         <div className="bg-white rounded-xl shadow-lg p-12 text-center">
           <Briefcase className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-          <h2 className="text-3xl font-bold text-gray-900 mb-4">Company Portal</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-4">
+            Company Portal
+          </h2>
           <p className="text-gray-600 text-lg">
             Company features coming soon in next release...
           </p>
@@ -263,7 +278,8 @@ const BrowsePositions = ({ onSelectPosition }) => {
       title: "Senior Backend Engineer",
       company: "TechCorp",
       description: "Build scalable microservices with Python and AWS",
-      idealProfile: "Expert Python developer with 5+ years experience in backend systems",
+      idealProfile:
+        "Expert Python developer with 5+ years experience in backend systems",
       taskDescription:
         "Implement a solution to find the Top K Frequent Elements in an array",
       location: "Remote",
@@ -289,7 +305,8 @@ const BrowsePositions = ({ onSelectPosition }) => {
       title: "Junior Frontend Developer",
       company: "WebStudio",
       description: "Build beautiful user interfaces with React",
-      idealProfile: "Passionate frontend developer with strong React fundamentals",
+      idealProfile:
+        "Passionate frontend developer with strong React fundamentals",
       taskDescription:
         "Build a responsive weather application using React and a weather API",
       location: "Remote",
@@ -336,7 +353,9 @@ const BrowsePositions = ({ onSelectPosition }) => {
       {filteredPositions.length === 0 ? (
         <div className="text-center py-12">
           <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">No positions found matching your search</p>
+          <p className="text-gray-600">
+            No positions found matching your search
+          </p>
         </div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -445,7 +464,9 @@ const PositionDetail = ({ position, onApply, onBack }) => {
               <Briefcase className="w-5 h-5 mr-2 text-purple-600" />
               Job Description
             </h3>
-            <p className="text-gray-700 leading-relaxed">{position.description}</p>
+            <p className="text-gray-700 leading-relaxed">
+              {position.description}
+            </p>
           </div>
 
           <div>
@@ -477,7 +498,9 @@ const PositionDetail = ({ position, onApply, onBack }) => {
           </div>
 
           <div>
-            <h3 className="text-xl font-bold text-gray-900 mb-3">How It Works</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-3">
+              How It Works
+            </h3>
             <div className="space-y-3">
               <div className="flex items-start">
                 <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold mr-3 flex-shrink-0">
@@ -485,7 +508,9 @@ const PositionDetail = ({ position, onApply, onBack }) => {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900">Upload Resume</p>
-                  <p className="text-gray-600">Submit your resume and GitHub repo</p>
+                  <p className="text-gray-600">
+                    Submit your resume and GitHub repo
+                  </p>
                 </div>
               </div>
               <div className="flex items-start">
@@ -493,7 +518,9 @@ const PositionDetail = ({ position, onApply, onBack }) => {
                   2
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900">AI Evaluates Code</p>
+                  <p className="font-semibold text-gray-900">
+                    AI Evaluates Code
+                  </p>
                   <p className="text-gray-600">
                     Gemini analyzes your code and generates questions
                   </p>
@@ -516,7 +543,9 @@ const PositionDetail = ({ position, onApply, onBack }) => {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900">Get Results</p>
-                  <p className="text-gray-600">Comprehensive AI-generated feedback</p>
+                  <p className="text-gray-600">
+                    Comprehensive AI-generated feedback
+                  </p>
                 </div>
               </div>
             </div>
@@ -713,7 +742,6 @@ const SubmitCode = ({ position, applicationData, onNext, onBack }) => {
   const [repoLink, setRepoLink] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [codeQuality, setCodeQuality] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -721,20 +749,19 @@ const SubmitCode = ({ position, applicationData, onNext, onBack }) => {
     setError("");
 
     try {
-      const resumeText = await applicationData.resumeFile.text();
+      // Create FormData to send PDF file
+      const formData = new FormData();
+      formData.append("repo_link", repoLink);
+      formData.append("job_description", position.description);
+      formData.append("ideal_candidate_profile", position.idealProfile);
+      formData.append("task_description", position.taskDescription);
+      formData.append("candidate_id", applicationData.candidateId);
+      formData.append("jd_id", position.id);
+      formData.append("resume_file", applicationData.resumeFile); // Send PDF directly
 
       const response = await fetch(`${API_BASE_URL}/evaluate/start`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          repo_link: repoLink,
-          job_description: position.description,
-          ideal_candidate_profile: position.idealProfile,
-          task_description: position.taskDescription,
-          candidate_id: applicationData.candidateId,
-          jd_id: position.id,
-          resume_content: resumeText,
-        }),
+        body: formData, // Send as FormData, not JSON
       });
 
       if (!response.ok) {
@@ -743,7 +770,6 @@ const SubmitCode = ({ position, applicationData, onNext, onBack }) => {
       }
 
       const result = await response.json();
-      setCodeQuality(result.code_quality_score);
       onNext({
         ...applicationData,
         ...result,
@@ -824,9 +850,9 @@ const SubmitCode = ({ position, applicationData, onNext, onBack }) => {
 
             <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
               <p className="text-sm text-purple-900">
-                <span className="font-semibold">Note:</span> Your repository will
-                be analyzed by AI to evaluate code quality, functionality, and
-                approach.
+                <span className="font-semibold">Note:</span> Your repository
+                will be analyzed by AI to evaluate code quality, functionality,
+                and approach.
               </p>
             </div>
 
@@ -865,6 +891,20 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [cameraError, setCameraError] = useState("");
 
+  const createAudioUrl = (audioBase64, mimeType) => {
+    if (!audioBase64) return null;
+    const byteString = atob(audioBase64);
+    const arrayBuffer = new ArrayBuffer(byteString.length);
+    const uintArray = new Uint8Array(arrayBuffer);
+
+    for (let i = 0; i < byteString.length; i++) {
+      uintArray[i] = byteString.charCodeAt(i);
+    }
+
+    const blob = new Blob([uintArray], { type: mimeType || "audio/mpeg" });
+    return URL.createObjectURL(blob);
+  };
+
   const videoRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -872,6 +912,29 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
 
   const interviewQuestions = applicationData.interview_questions || [];
   const mcqQuestions = applicationData.mcq_questions || [];
+
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef(null);
+
+  // Load audio when question changes
+  useEffect(() => {
+    const q = interviewQuestions[currentQuestion];
+    if (q?.audio_base64) {
+      const url = createAudioUrl(q.audio_base64, q.mime_type);
+      setAudioUrl(url);
+    } else {
+      setAudioUrl(null);
+    }
+  }, [currentQuestion, interviewQuestions]);
+
+  const handlePlayAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.play();
+      setIsPlaying(true);
+      audioRef.current.onended = () => setIsPlaying(false);
+    }
+  };
 
   const startRecording = async () => {
     try {
@@ -939,10 +1002,13 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
     );
 
     try {
-      const response = await fetch(`${API_BASE_URL}/evaluate/submit-responses`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/evaluate/submit-responses`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to submit");
 
@@ -1010,6 +1076,19 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
                 <p className="text-purple-800 text-lg">
                   {interviewQuestions[currentQuestion]}
                 </p>
+                {audioUrl && (
+                  <div className="mt-4 flex items-center space-x-4">
+                    <button
+                      onClick={handlePlayAudio}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition flex items-center"
+                    >
+                      <Volume2 className="w-5 h-5 mr-2" />
+                      {isPlaying ? "Playing..." : "Play AI Audio"}
+                    </button>
+
+                    <audio ref={audioRef} src={audioUrl} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1020,7 +1099,9 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
                 <div className="w-3 h-3 bg-red-600 rounded-full animate-pulse mr-2" />
                 <span className="font-semibold text-red-900">Recording...</span>
               </div>
-              <span className="font-mono text-red-900">{formatTime(recordingTime)}</span>
+              <span className="font-mono text-red-900">
+                {formatTime(recordingTime)}
+              </span>
             </div>
           )}
 
@@ -1060,6 +1141,21 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
               ? "Move to MCQ Assessment →"
               : "Next Question →"}
           </button>
+
+          {videoBlobs[currentQuestion] &&
+            applicationData?.interview_transcripts?.[currentQuestion] && (
+              <div className="bg-gray-100 border border-gray-200 rounded-lg p-4 mt-4">
+                <h4 className="font-semibold text-gray-900 mb-2">
+                  Transcript Preview
+                </h4>
+                <p className="text-gray-700">
+                  {
+                    applicationData.interview_transcripts[currentQuestion]
+                      .transcription
+                  }
+                </p>
+              </div>
+            )}
         </div>
       </div>
     );
@@ -1088,7 +1184,10 @@ const TakeInterview = ({ applicationData, onComplete, onBack }) => {
 
         <div className="space-y-6 mb-8">
           {mcqQuestions.map((q, i) => (
-            <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-6">
+            <div
+              key={i}
+              className="bg-gray-50 border border-gray-200 rounded-lg p-6"
+            >
               <h4 className="font-bold text-gray-900 mb-4">
                 <span className="bg-purple-600 text-white w-8 h-8 rounded-full inline-flex items-center justify-center mr-3">
                   {i + 1}
@@ -1194,7 +1293,11 @@ const ApplicationStatus = ({ evaluation, onBackToBrowse }) => {
 
         <div className="p-12">
           {/* Overall Score */}
-          <div className={`border-2 rounded-xl p-8 mb-12 text-center ${getRecommendationColor(overallScore)}`}>
+          <div
+            className={`border-2 rounded-xl p-8 mb-12 text-center ${getRecommendationColor(
+              overallScore
+            )}`}
+          >
             <div className="text-6xl font-bold mb-2">{overallScore}</div>
             <div className="text-2xl font-semibold mb-2">Overall Score</div>
             <div className="text-lg">{getRecommendationText(overallScore)}</div>
@@ -1273,6 +1376,43 @@ const ApplicationStatus = ({ evaluation, onBackToBrowse }) => {
               </div>
             </div>
           )}
+          {/* Interview Transcript Section */}
+          {evaluation.interview_transcripts &&
+            evaluation.interview_transcripts.length > 0 && (
+              <div className="mb-12">
+                <h3 className="font-bold text-gray-900 mb-4 flex items-center">
+                  <Video className="w-5 h-5 mr-2 text-red-600" />
+                  Video Interview Transcripts
+                </h3>
+
+                <div className="space-y-4">
+                  {evaluation.interview_transcripts.map((item, index) => (
+                    <div
+                      key={index}
+                      className="bg-gray-50 border border-gray-200 p-4 rounded-lg"
+                    >
+                      <p className="font-semibold text-gray-900 mb-2">
+                        Question {index + 1}
+                      </p>
+
+                      <p className="text-gray-700 mb-2">
+                        <span className="font-semibold text-purple-700">
+                          Q:{" "}
+                        </span>
+                        {item.question}
+                      </p>
+
+                      <p className="text-gray-700">
+                        <span className="font-semibold text-green-700">
+                          Transcript:{" "}
+                        </span>
+                        {item.transcription}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
           {/* Actions */}
           <div className="flex flex-col sm:flex-row gap-4">

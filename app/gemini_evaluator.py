@@ -3,11 +3,12 @@ import json
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
+from app.github_fetcher import fetch_github_code
 
 load_dotenv()
 
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
-GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-1.5-flash")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-flash-latest")
 
 if not GENAI_API_KEY:
     raise ValueError("GENAI_API_KEY not found in environment variables")
@@ -76,9 +77,10 @@ STAGE4_SCHEMA = types.Schema(
 )
 
 
-def stage1_evaluate_code(code_solution, task_description, jd_text):
+def stage1_evaluate_code(repo_link, task_description, jd_text):
     """
-    STAGE 1: Gemini evaluates submitted code
+    STAGE 1: Gemini evaluates code from GitHub repo
+    NOW ACTUALLY FETCHES THE CODE FROM GITHUB
     
     Returns:
     - code_quality_score (1-100)
@@ -86,57 +88,72 @@ def stage1_evaluate_code(code_solution, task_description, jd_text):
     - interview_questions (5 specific questions about the code)
     - mcq_questions (3 questions with options)
     """
-    print("🤖 Gemini evaluating code (Stage 1)...")
+    print("🤖 Gemini evaluating code from GitHub (Stage 1)...")
+
+    try:
+        # FETCH ACTUAL CODE FROM GITHUB
+        code_content = fetch_github_code(repo_link)
+        
+        # Truncate if too long (Gemini has token limits)
+        max_code_length = 15000
+        if len(code_content) > max_code_length:
+            code_content = code_content[:max_code_length] + "\n\n[... Code truncated for length ...]"
+        
+    except Exception as e:
+        print(f"❌ Could not fetch GitHub code: {str(e)}")
+        raise RuntimeError(f"GitHub fetch failed: {str(e)}")
 
     prompt = f"""
-    You are an expert code reviewer and interview question generator.
-    
-    TASK DESCRIPTION:
-    {task_description}
-    
-    JOB DESCRIPTION:
-    {jd_text}
-    
-    SUBMITTED CODE:
-    ```
-    {code_solution[:4000]}  # Limit to 4000 chars for free tier
-    ```
-    
-    Please evaluate this code submission and provide:
-    
-    1. **code_quality_score** (1-100): Rate the code based on:
-       - Functionality (does it solve the task?)
-       - Code structure and readability
-       - Error handling
-       - Performance considerations
-       - Best practices and conventions
-    
-    2. **code_description**: Concise description (2-3 sentences) of what this code achieves
-    
-    3. **interview_questions**: Generate 5 specific interview questions about THIS CODE. Ask about:
-       - Implementation decisions
-       - Problem-solving approach
-       - Trade-offs considered
-       - Edge cases handled
-       - How it relates to the job requirements
-       Example: "Can you walk me through your approach to optimize the time complexity?"
-    
-    4. **mcq_questions**: Generate 3 multiple-choice questions testing understanding of:
-       - The algorithm/approach used
-       - Code correctness
-       - Performance concepts
-       Each question should have 4 options (A, B, C, D) and specify the correct_answer (e.g., "A")
-    
-    Return valid JSON only, no markdown.
-    """
+You are an expert code reviewer and interview question generator.
+
+TASK DESCRIPTION:
+{task_description}
+
+JOB DESCRIPTION:
+{jd_text}
+
+CANDIDATE'S CODE SUBMISSION:
+{code_content}
+
+Please analyze this code submission and provide:
+
+1. **code_quality_score** (1-100): Rate the code based on:
+   - Functionality (does it solve the task correctly?)
+   - Code structure and readability
+   - Error handling and edge cases
+   - Performance and efficiency
+   - Best practices and conventions
+   - Documentation and comments
+
+2. **code_description**: Concise description (2-3 sentences) of what this code achieves and how it solves the problem
+
+3. **interview_questions**: Generate 5 specific interview questions about THIS EXACT CODE. Ask about:
+   - Their implementation choices and why they made them
+   - How they would handle specific edge cases
+   - Trade-offs they considered
+   - Performance optimizations they applied
+   - How their solution relates to the job requirements
+   
+   Example: "I noticed you used a hash map in your solution. Can you explain why you chose this data structure over alternatives?"
+
+4. **mcq_questions**: Generate 3 multiple-choice questions testing:
+   - Understanding of the algorithm/approach used in THEIR code
+   - Code correctness and functionality
+   - Time/space complexity concepts
+   
+   Each question should have 4 options (A, B, C, D) and specify the correct_answer (e.g., "A")
+
+Return valid JSON only, no markdown.
+"""
 
     try:
         response = client.models.generate_content(
             model=GENAI_MODEL,
             contents=prompt,
-            generation_config=types.GenerationConfig(
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=STAGE1_SCHEMA,
+                temperature=0.3,
             ),
         )
 
@@ -146,6 +163,9 @@ def stage1_evaluate_code(code_solution, task_description, jd_text):
         result["code_quality_score"] = max(1, min(100, result.get("code_quality_score", 50)))
         
         print(f"✅ Stage 1 complete: Code quality = {result['code_quality_score']}/100")
+        print(f"✅ Generated {len(result['interview_questions'])} interview questions")
+        print(f"✅ Generated {len(result['mcq_questions'])} MCQ questions")
+        
         return result
 
     except Exception as e:
@@ -153,42 +173,42 @@ def stage1_evaluate_code(code_solution, task_description, jd_text):
         # Return fallback
         return {
             "code_quality_score": 50,
-            "code_description": "Code was evaluated but response format invalid",
+            "code_description": "Code repository was analyzed but full evaluation could not be completed",
             "interview_questions": [
-                "Can you explain your approach to solving this problem?",
-                "What challenges did you face during implementation?",
-                "How would you optimize this solution?",
-                "Can you describe the time and space complexity?",
-                "How did you test your solution?",
+                "Can you walk me through your overall approach to solving this problem?",
+                "What challenges did you face during implementation and how did you overcome them?",
+                "How would you optimize this solution for better performance?",
+                "Can you describe the time and space complexity of your solution?",
+                "How did you test your solution to ensure it handles edge cases?",
             ],
             "mcq_questions": [
                 {
                     "question": "What is the primary goal of the submitted code?",
                     "options": [
                         "To solve the coding task efficiently",
-                        "To create a web server",
+                        "To demonstrate framework knowledge",
+                        "To create a web application",
                         "To process large datasets",
-                        "To train a machine learning model",
                     ],
                     "correct_answer": "A",
                 },
                 {
-                    "question": "Which of these is most important in code review?",
+                    "question": "Which is most important in production code?",
                     "options": [
-                        "Code readability",
-                        "Using fancy frameworks",
-                        "Code length",
-                        "Following trends",
+                        "Readability and maintainability",
+                        "Using the latest frameworks",
+                        "Minimizing lines of code",
+                        "Adding many features",
                     ],
                     "correct_answer": "A",
                 },
                 {
                     "question": "What should you always consider when designing algorithms?",
                     "options": [
-                        "Time and space complexity",
-                        "Making it complicated",
-                        "Using all features",
-                        "Code comments only",
+                        "Time and space complexity trade-offs",
+                        "Using the most complex solution",
+                        "Following coding trends",
+                        "Maximizing code length",
                     ],
                     "correct_answer": "A",
                 },
@@ -198,8 +218,8 @@ def stage1_evaluate_code(code_solution, task_description, jd_text):
 
 def stage4_final_analysis(
     jd_text,
-    resume_text,
-    code_solution,
+    resume_bytes,
+    repo_link,
     task_description,
     resume_fit_score,
     code_fit_score,
@@ -210,139 +230,171 @@ def stage4_final_analysis(
 ):
     """
     STAGE 4: Gemini comprehensive final analysis
+    Uses multimodal to analyze PDF resume
+    Fetches GitHub code again for context
     
     Takes all scores and data, returns comprehensive evaluation
     """
     print("🎯 Gemini generating final analysis (Stage 4)...")
 
-    # Calculate video interview score from transcripts
-    video_interview_score = analyze_interview_responses(interview_transcripts)
+    # Fetch code again for context
+    try:
+        code_content = fetch_github_code(repo_link)
+        if len(code_content) > 10000:
+            code_content = code_content[:10000] + "\n\n[... truncated ...]"
+    except Exception as e:
+        print(f"⚠️ Could not fetch code for Stage 4: {str(e)}")
+        code_content = "[Code could not be fetched]"
 
     prompt = f"""
-    You are an expert recruiter and hiring manager. Based on the following evaluation data, provide a comprehensive final assessment:
-    
-    ========== CANDIDATE DATA ==========
-    
-    RESUME:
-    {resume_text[:1000]}
-    
-    SUBMITTED CODE SOLUTION:
-    {code_solution[:1500]}
-    
-    JOB DESCRIPTION:
-    {jd_text[:1000]}
-    
-    ========== EVALUATION SCORES ==========
-    
-    - Resume Fit Score: {resume_fit_score}/100
-    - Code Solution Fit Score: {code_fit_score}/100
-    - Code Quality Score: {code_quality_score}/100
-    - MCQ Assessment Score: {mcq_score}/100
-    - Video Interview Score: {video_interview_score}/100
-    
-    ========== INTERVIEW DATA ==========
-    
-    Interview Questions Asked:
-    {json.dumps(interview_questions, indent=2)}
-    
-    Candidate's Responses:
-    {json.dumps(interview_transcripts, indent=2)}
-    
-    ========== YOUR TASK ==========
-    
-    Based on ALL this information, provide:
-    
-    1. **overall_score** (1-100): Weighted overall score calculated as:
-       - 15% Resume Fit
-       - 15% Code Fit
-       - 30% Code Quality
-       - 25% Video Interview Performance
-       - 15% MCQ Score
-    
-    2. **video_interview_score** (1-100): Analyze the interview transcripts and score based on:
-       - Communication clarity
-       - Technical depth
-       - Problem-solving approach
-       - Alignment with job requirements
-    
-    3. **summary**: 2-3 sentence professional summary of the candidate's overall performance
-    
-    4. **strengths**: List 3-4 key strengths demonstrated by the candidate (clear bullet points)
-    
-    5. **weaknesses**: List 2-3 areas for improvement or concerns (clear bullet points)
-    
-    6. **recommendation**: One of: "Strong Hire", "Hire", "Maybe", or "No Hire"
-    
-    Return valid JSON only, no markdown.
-    """
+You are an expert recruiter and technical hiring manager. Based on the following comprehensive evaluation data, provide a final assessment of this candidate.
+
+========== EVALUATION SCORES ==========
+
+- Resume Fit Score: {resume_fit_score}/100 (How well resume matches ideal candidate profile)
+- Code Solution Fit Score: {code_fit_score}/100 (How well code solves the task)
+- Code Quality Score: {code_quality_score}/100 (Code quality, best practices, efficiency)
+- MCQ Assessment Score: {mcq_score}/100 (Technical knowledge test)
+
+========== JOB DETAILS ==========
+
+JOB DESCRIPTION:
+{jd_text[:1000]}
+
+TASK DESCRIPTION:
+{task_description}
+
+========== CANDIDATE'S CODE ==========
+
+GITHUB REPOSITORY: {repo_link}
+
+CODE SAMPLE:
+{code_content}
+
+========== INTERVIEW DATA ==========
+
+Interview Questions Asked:
+{json.dumps(interview_questions, indent=2)}
+
+Candidate's Video Interview Responses (Transcribed):
+{json.dumps(interview_transcripts, indent=2)}
+
+========== YOUR TASK ==========
+
+Analyze the RESUME PDF provided, the candidate's CODE, and their INTERVIEW RESPONSES to provide:
+
+1. **video_interview_score** (1-100): Score the video interview responses based on:
+   - Technical depth and accuracy of explanations
+   - Communication clarity and professionalism
+   - Ability to articulate their thought process
+   - Demonstration of problem-solving skills
+   - Alignment with job requirements
+   
+2. **overall_score** (1-100): Calculate weighted overall score:
+   - 15% Resume Fit (how well resume matches ideal profile)
+   - 15% Code Fit (how well solution addresses the task)
+   - 30% Code Quality (implementation quality and best practices)
+   - 25% Video Interview Performance (communication and technical depth)
+   - 15% MCQ Score (technical knowledge)
+   
+3. **summary**: 2-3 sentence professional summary of the candidate's overall performance
+
+4. **strengths**: List 3-5 key strengths demonstrated by the candidate across all evaluation areas
+
+5. **weaknesses**: List 2-4 areas for improvement or concerns
+
+6. **recommendation**: One of: "Strong Hire", "Hire", "Maybe", or "No Hire"
+   - Strong Hire: 90-100 (exceptional candidate)
+   - Hire: 75-89 (solid candidate, recommended)
+   - Maybe: 60-74 (borderline, needs discussion)
+   - No Hire: <60 (not recommended)
+
+Return valid JSON only, no markdown.
+"""
 
     try:
+        # Send PDF resume with prompt
         response = client.models.generate_content(
             model=GENAI_MODEL,
-            contents=prompt,
-            generation_config=types.GenerationConfig(
+            contents=[
+                types.Part.from_bytes(
+                    data=resume_bytes,
+                    mime_type="application/pdf"
+                ),
+                prompt
+            ],
+            config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=STAGE4_SCHEMA,
+                temperature=0.4,
             ),
         )
 
         result = json.loads(response.text)
 
         # Ensure scores are valid
+        result["video_interview_score"] = max(1, min(100, result.get("video_interview_score", 50)))
         result["overall_score"] = max(1, min(100, result.get("overall_score", 50)))
-        result["video_interview_score"] = video_interview_score
 
         print(f"✅ Stage 4 complete: Overall score = {result['overall_score']}/100")
+        print(f"✅ Video interview score = {result['video_interview_score']}/100")
+        print(f"✅ Recommendation: {result['recommendation']}")
+        
         return result
 
     except Exception as e:
         print(f"❌ Gemini Stage 4 error: {str(e)}")
-        # Fallback response
+        
+        # Calculate fallback scores
+        video_score = estimate_interview_quality(interview_transcripts)
+        overall = int(
+            (resume_fit_score * 0.15)
+            + (code_fit_score * 0.15)
+            + (code_quality_score * 0.30)
+            + (video_score * 0.25)
+            + (mcq_score * 0.15)
+        )
+        
         return {
-            "overall_score": (
-                (resume_fit_score * 0.15)
-                + (code_fit_score * 0.15)
-                + (code_quality_score * 0.30)
-                + (video_interview_score * 0.25)
-                + (mcq_score * 0.15)
-            ),
-            "video_interview_score": video_interview_score,
-            "summary": "Candidate demonstrated technical capability and alignment with role requirements.",
+            "overall_score": overall,
+            "video_interview_score": video_score,
+            "summary": "Candidate demonstrated technical capability across code submission and interview responses.",
             "strengths": [
-                "Strong coding fundamentals",
-                "Clear communication in interview",
-                "Problem-solving approach",
+                "Completed the coding challenge successfully",
+                "Provided responses to all interview questions",
+                "Demonstrated problem-solving approach",
             ],
             "weaknesses": [
-                "Limited experience in some areas",
-                "Needs improvement in optimization",
+                "Some areas need further evaluation",
+                "Could improve technical communication",
             ],
-            "recommendation": "Hire" if ((resume_fit_score + code_quality_score) / 2) > 75 else "Maybe",
+            "recommendation": "Hire" if overall >= 75 else ("Maybe" if overall >= 60 else "No Hire"),
         }
 
 
-def analyze_interview_responses(transcripts):
+def estimate_interview_quality(transcripts):
     """
-    Analyze interview transcripts and return a score (1-100)
-    Based on length, clarity, and relevance of responses
+    Estimate interview quality from transcripts when Gemini analysis fails
+    Based on response length and substance
     """
     if not transcripts or len(transcripts) == 0:
         return 50
 
     try:
-        # Simple heuristic: score based on response length and content
-        avg_length = sum(len(t) for t in transcripts) / len(transcripts)
+        total_length = sum(len(t) for t in transcripts)
+        avg_length = total_length / len(transcripts)
 
-        # Longer responses (but not too long) indicate better communication
-        if avg_length < 50:
-            return 40
-        elif avg_length < 100:
-            return 60
-        elif avg_length < 300:
-            return 75
+        # Heuristic scoring
+        if avg_length < 30:
+            return 35  # Very short responses
+        elif avg_length < 80:
+            return 55  # Brief responses
+        elif avg_length < 200:
+            return 70  # Decent responses
+        elif avg_length < 400:
+            return 85  # Detailed responses
         else:
-            return 85
+            return 90  # Very thorough responses
 
-    except Exception as e:
-        print(f"⚠️  Interview analysis error: {str(e)}")
+    except Exception:
         return 50

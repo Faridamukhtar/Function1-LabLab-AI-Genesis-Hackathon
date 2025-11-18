@@ -9,12 +9,17 @@ class MCQScorer:
         - mcq_questions: List of question objects with 'correct_answer' field
         - user_answers: List of user's answers ['A', 'B', 'C', ...]
         
-        Returns: 1-100 score
+        Returns: Dict with score, correct_count, total_count
         """
         if not mcq_questions or not user_answers:
-            return 50
+            return {
+                'score': 50,
+                'correct_count': 0,
+                'total_count': len(mcq_questions) if mcq_questions else 0
+            }
 
         correct_count = 0
+        total_count = len(mcq_questions)
 
         for i, question in enumerate(mcq_questions):
             if i < len(user_answers):
@@ -30,10 +35,15 @@ class MCQScorer:
                     )
 
         # Convert to 1-100 score
-        percentage = (correct_count / len(mcq_questions)) * 100
+        percentage = (correct_count / total_count) * 100
         score = max(1, min(100, int(percentage)))
 
         print(
-            f"   MCQ Score: {score}/100 ({correct_count}/{len(mcq_questions)} correct)"
+            f"   MCQ Score: {score}/100 ({correct_count}/{total_count} correct)"
         )
-        return score
+        
+        return {
+            'score': score,
+            'correct_count': correct_count,
+            'total_count': total_count
+        }
