@@ -23,7 +23,7 @@ import {
 const API_BASE_URL = "http://localhost:8000/api";
 
 // ============ MAIN APP ============
-const MicroApprenticeshipPlatform = () => {
+const HackathonSubmission = () => {
   const [userType, setUserType] = useState(null);
 
   return (
@@ -51,10 +51,10 @@ const LandingPage = ({ onSelectType }) => {
             </div>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-4">
-            AI Micro-Apprenticeship Platform
+            Holistic Hires
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Revolutionizing hiring with AI-powered evaluations and video
+            Holistic, bias-free hiring with AI-powered evaluations and video
             interviews
           </p>
         </div>
@@ -1491,4 +1491,4 @@ const ApplicationStatus = ({ evaluation, onBackToBrowse }) => {
   );
 };
 
-export default MicroApprenticeshipPlatform;
+export default HackathonSubmission;
