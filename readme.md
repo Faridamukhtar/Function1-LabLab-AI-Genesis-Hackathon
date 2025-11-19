@@ -1,418 +1,366 @@
-# 🚀 AI Micro-Apprenticeship Platform
+# 🚀 Holistic Hires
 
-An intelligent hiring platform that evaluates candidates through **AI-powered code analysis**, **personalized video interviews**, and **comprehensive scoring**.
+> **AI-Powered Technical Hiring Platform** - Revolutionizing recruitment with bias-free, comprehensive candidate evaluation
+---
 
-## 🎯 What Makes This Special
+## 🎯 **What Makes This Special?**
 
-1. **Real GitHub Code Analysis**: Fetches and evaluates actual code from candidate repositories
-2. **Dynamic Interview Questions**: Gemini generates questions specific to each candidate's code
-3. **AI Video Transcription**: Multimodal AI transcribes and evaluates video responses
-4. **Vector Similarity Scoring**: Uses Qdrant for semantic matching of resumes and code
-5. **Comprehensive Evaluation**: Weighted scoring across 5 dimensions
+Traditional hiring is broken. Resumes lie, interviews are biased, and coding challenges are subjective. **Holistic Hires** fixes this with:
+
+- **🤖 AI-Powered Code Analysis** - Gemini evaluates actual GitHub repositories, not just claims
+- **🎥 AI Video Interviews** - Generates custom questions based on candidate's code, transcribes responses
+- **📊 Multi-Dimensional Scoring** - 5-factor evaluation (Code Quality, Resume Fit, Code Alignment, MCQ, Interview)
+- **⚖️ Bias-Free Evaluation** - Consistent AI assessment removes human prejudice
+- **⚡ End-to-End Automation** - From submission to comprehensive report in minutes
 
 ---
 
-## 🔄 Complete Evaluation Flow
+## 🌟 **Key Features**
 
-### **STAGE 1: Initial Evaluation** (`POST /api/evaluate/start`)
+### **For Companies**
+- 📝 Post positions with custom coding challenges
+- 🎯 Define ideal candidate profiles
+- 📊 Get comprehensive AI-generated candidate reports
+- 🔍 Search and rank candidates by semantic fit
 
-**Input:**
-- Resume PDF
-- GitHub repository link
-- Job description
-- Ideal candidate profile
-- Task description
+### **For Candidates**
+- 🌐 Browse open positions
+- 💻 Submit GitHub repositories (real code, not whiteboard puzzles)
+- 🎤 Take AI-powered video interviews with personalized questions
+- 📈 Receive detailed feedback on all evaluation areas
 
-**Process:**
-1. **Gemini fetches code from GitHub** (via GitHub API)
-2. **Gemini evaluates code quality** (functionality, structure, best practices)
-3. **Gemini generates code description** (what the code achieves)
-4. **Gemini creates 5 interview questions** (specific to their code implementation)
-5. **Gemini creates 3 MCQ questions** (testing technical understanding)
-6. **Qdrant calculates resume fit score** (resume text vs ideal candidate profile)
-7. **Qdrant calculates code fit score** (code description vs task requirements)
-8. **Optional: Generate TTS audio** for interview questions
+---
 
-**Output:**
-```json
-{
-  "interview_questions": [
-    "I noticed you used a hash map in your solution. Can you explain why you chose this data structure?",
-    "How would you handle the case where the input array is empty?",
-    ...
-  ],
-  "mcq_questions": [
-    {
-      "question": "What is the time complexity of your solution?",
-      "options": ["O(n)", "O(n log n)", "O(n²)", "O(1)"],
-      "correct_answer": "A"
-    },
-    ...
-  ],
-  "scores_so_far": {
-    "code_quality": 85,
-    "resume_fit": 78,
-    "code_fit": 82
-  }
-}
+## 🏗️ **Architecture**
+
+```
+┌─────────────────┐
+│   Frontend      │  React + Tailwind
+│   (Candidate)   │  - Video recording
+│                 │  - MCQ interface
+└────────┬────────┘  - Results dashboard
+         │
+         ↓
+┌─────────────────┐
+│   FastAPI       │  Python Backend
+│   Backend       │  - Session management
+│                 │  - File handling
+└────────┬────────┘  - Orchestration
+         │
+    ┌────┴────┬─────────────┬──────────────┐
+    ↓         ↓             ↓              ↓
+┌───────┐ ┌──────┐ ┌─────────────┐ ┌──────────┐
+│Gemini │ │Qdrant│ │GitHub API   │ │PyPDF2    │
+│2.0    │ │Vector│ │Fetcher      │ │Extractor │
+│Flash  │ │DB    │ │             │ │          │
+└───────┘ └──────┘ └─────────────┘ └──────────┘
+```
+
+### **Evaluation Pipeline**
+
+```
+STAGE 1: Initial Assessment
+├─ Fetch code from GitHub repository
+├─ Gemini evaluates code quality (1-100)
+├─ Generate 5 personalized interview questions
+├─ Generate 3 MCQ questions
+├─ Qdrant scores resume fit vs ideal profile
+└─ Qdrant scores code fit vs task description
+
+STAGE 2: Candidate Interview (Frontend)
+├─ Play AI-generated audio questions (TTS)
+├─ Record video responses (WebRTC)
+└─ Complete MCQ assessment
+
+STAGE 3: Final Analysis
+├─ Gemini transcribes all video responses
+├─ Deterministic MCQ scoring
+├─ Gemini comprehensive multimodal analysis
+│  ├─ Resume PDF (multimodal input)
+│  ├─ GitHub code (fetched again)
+│  └─ Interview transcripts
+├─ Calculate weighted overall score:
+│  ├─ 30% Code Quality
+│  ├─ 25% Video Interview
+│  ├─ 15% Resume Fit
+│  ├─ 15% Code Fit
+│  └─ 15% MCQ Score
+└─ Generate: summary, strengths, weaknesses, recommendation
 ```
 
 ---
 
-### **STAGE 2: Candidate Interview** (Frontend)
+## 🛠️ **Tech Stack**
 
-**Process:**
-1. Display interview questions one by one
-2. Candidate records video response to each question
-3. Display MCQ questions
-4. Candidate selects answers
+### **Backend**
+- **FastAPI** - High-performance async API
+- **Google Gemini 2.0 Flash** - Multimodal AI for code evaluation, question generation, transcription, and final analysis
+- **Qdrant** - Vector database for semantic similarity scoring
+- **Sentence Transformers** - Embeddings for resume/code matching
+- **PyPDF2** - Resume text extraction
+- **GitHub API** - Real repository code fetching
 
-**Frontend Requirements:**
-- Camera/microphone access
-- Video recording (WebM format recommended)
-- Video upload (up to 50MB per file)
+### **Frontend**
+- **React 18** - Modern UI framework
+- **Tailwind CSS** - Utility-first styling
+- **Lucide Icons** - Beautiful iconography
+- **WebRTC** - Native browser video recording
+- **Fetch API** - Backend communication
 
 ---
 
-### **STAGE 3: Final Evaluation** (`POST /api/evaluate/submit-responses`)
+## 🚀 **Quick Start**
 
-**Input:**
-- Video responses (one per interview question)
-- MCQ answers (["A", "B", "C"])
+### **Prerequisites**
+```bash
+Python 3.9+
+Node.js 18+
+Google Gemini API Key
+GitHub Personal Access Token (recommended)
+Qdrant Cloud account (optional but recommended)
+```
 
-**Process:**
-1. **Gemini transcribes all video responses** (multimodal speech-to-text)
-2. **Score MCQ answers** deterministically against correct answers
-3. **Gemini performs comprehensive analysis**:
-   - Re-analyzes resume PDF
-   - Re-analyzes GitHub code
-   - Evaluates interview transcripts
-   - Calculates video_interview_score
-   - Calculates weighted overall_score
-   - Generates summary, strengths, weaknesses, recommendation
+### **Backend Setup**
 
-**Scoring Weights:**
-- **30%** Code Quality (implementation, best practices)
-- **25%** Video Interview (communication, technical depth)
-- **15%** Resume Fit (match with ideal profile)
-- **15%** Code Fit (solution addresses task)
-- **15%** MCQ Score (technical knowledge)
+1. **Clone & Install**
+```bash
+git clone https://github.com/yourusername/holistic-hires.git
+cd holistic-hires/backend
+pip install -r requirements.txt
+```
 
-**Output:**
+2. **Configure Environment**
+```bash
+# Create .env file
+cat > .env << EOF
+GENAI_API_KEY=your_gemini_api_key_here
+GENAI_MODEL=gemini-2.0-flash
+GITHUB_TOKEN=your_github_token_here
+QDRANT_URL=your_qdrant_url_here
+QDRANT_API_KEY=your_qdrant_key_here
+EOF
+```
+
+3. **Run Backend**
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+### **Frontend Setup**
+
+1. **Install & Configure**
+```bash
+cd ../frontend
+npm install
+
+# Create .env file
+echo "VITE_API_BASE_URL=http://localhost:8000" > .env
+```
+
+2. **Run Frontend**
+```bash
+npm run dev
+```
+
+3. **Open Browser**
+```
+http://localhost:5173
+```
+
+---
+
+## 📋 **API Endpoints**
+
+### **POST /evaluate/start**
+Start candidate evaluation
+- **Input**: Resume PDF, GitHub repo, JD, ideal profile, task
+- **Output**: Interview questions, MCQs, initial scores
+
+### **POST /evaluate/submit-responses**
+Submit interview responses
+- **Input**: Video files, MCQ answers
+- **Output**: Complete evaluation results
+
+### **GET /evaluate/status/{candidate_id}**
+Check evaluation status
+
+### **DELETE /evaluate/cancel/{candidate_id}**
+Cancel in-progress evaluation
+
+---
+
+## 🎓 **How It Works**
+
+### **1. Candidate Applies**
+```javascript
+// Upload resume + GitHub repo link
+FormData: {
+  resume_file: PDF,
+  repo_link: "https://github.com/user/project",
+  job_description: "...",
+  ideal_candidate_profile: "...",
+  task_description: "Implement Top K Frequent Elements"
+}
+```
+
+### **2. AI Evaluates Code**
+```python
+# Gemini fetches and analyzes actual code
+code_content = fetch_github_code(repo_link)
+result = gemini.evaluate_code(
+    code_content,
+    task_description,
+    job_description
+)
+# Returns: quality score, description, questions
+```
+
+### **3. Personalized Interview**
+```python
+# Generated questions are specific to THEIR code
+questions = [
+  "I noticed you used a hash map. Why choose this over alternatives?",
+  "Your solution has O(n log n) complexity. Could you optimize this?",
+  "How would you handle edge case X in your implementation?"
+]
+```
+
+### **4. Comprehensive Scoring**
+```python
+overall_score = (
+    code_quality * 0.30 +
+    video_interview * 0.25 +
+    resume_fit * 0.15 +
+    code_fit * 0.15 +
+    mcq_score * 0.15
+)
+```
+
+---
+
+## 📊 **Sample Output**
+
 ```json
 {
-  "overall_score": 82,
+  "overall_score": 87,
   "recommendation": "Hire",
   "scores": {
     "code_quality": 85,
     "resume_fit": 78,
-    "code_fit": 82,
-    "mcq": 67,
-    "video_interview": 88
+    "code_fit": 90,
+    "mcq": 100,
+    "video_interview": 82
   },
-  "summary": "Strong technical candidate with excellent problem-solving skills...",
+  "summary": "Strong candidate with excellent problem-solving skills...",
   "strengths": [
-    "Clean, well-structured code with proper error handling",
-    "Articulate communication during interview",
-    "Deep understanding of algorithm complexity"
+    "Clean, well-documented code with proper error handling",
+    "Deep understanding of time/space complexity trade-offs",
+    "Clear communication during video interview"
   ],
   "weaknesses": [
-    "Could improve documentation",
-    "Some edge cases not fully handled"
+    "Could improve unit test coverage",
+    "Some opportunities for code optimization"
   ]
 }
 ```
 
 ---
 
-## 📦 Installation & Setup
+## 🔐 **Security & Privacy**
 
-### Prerequisites
-- Python 3.10+
-- Node.js 18+ (for frontend)
-- Google Gemini API key
-- (Optional) Qdrant Cloud account
-- (Optional) GitHub Personal Access Token
+- 🔒 All video data processed securely
+- 🗑️ Session data cleaned after evaluation
+- 🚫 No persistent storage of video files
+- ✅ Resume PDFs handled in-memory only
+- 🔑 API keys stored in environment variables
 
-### Backend Setup
+---
+
+## 🎨 **Screenshots**
+
+### Landing Page
+Beautiful dual-portal design for companies and candidates
+
+### Candidate Flow
+1. Browse positions with search
+2. View detailed job descriptions
+3. Submit application with resume
+4. Submit GitHub repository
+5. Take AI video interview
+6. Complete MCQ assessment
+7. View comprehensive results
+
+---
+
+## 🧪 **Testing**
 
 ```bash
-# Clone repository
-git clone <your-repo>
-cd backend
+# Backend tests
+pytest tests/
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
-cp .env.template .env
-# Edit .env and add your API keys
-
-# Run server
-python main.py
-```
-
-### Frontend Setup
-
-```bash
-cd frontend
-npm install
-npm run dev
+# Frontend tests
+npm test
 ```
 
 ---
 
-## 🔑 API Endpoints
+## 🚧 **Roadmap**
 
-### 1. Start Evaluation
-
-```http
-POST /api/evaluate/start
-Content-Type: multipart/form-data
-
-{
-  "repo_link": "https://github.com/username/repo",
-  "resume_file": <PDF file>,
-  "job_description": "...",
-  "ideal_candidate_profile": "...",
-  "task_description": "...",
-  "candidate_id": "CAND_12345",
-  "jd_id": "JD_001"
-}
-```
-
-### 2. Submit Responses
-
-```http
-POST /api/evaluate/submit-responses
-Content-Type: multipart/form-data
-
-{
-  "candidate_id": "CAND_12345",
-  "interview_videos": [<video1.webm>, <video2.webm>, ...],
-  "mcq_answers": '["A", "B", "C"]'
-}
-```
-
-### 3. Check Status
-
-```http
-GET /api/evaluate/status/{candidate_id}
-```
-
-### 4. Health Check
-
-```http
-GET /api/health
-```
+- [ ] **Company Portal** - Full company dashboard for posting jobs and managing candidates
+- [ ] **Real-time Collaboration** - Live interview scheduling
+- [ ] **Advanced Analytics** - Candidate comparison charts
+- [ ] **API Rate Limiting** - Redis-based throttling
+- [ ] **Email Notifications** - Status updates
+- [ ] **Candidate Dashboard** - Track multiple applications
+- [ ] **Mobile App** - iOS/Android support
 
 ---
 
-## 🏗️ Architecture
+## 🤝 **Contributing**
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    React Frontend                        │
-│  (Resume Upload, Code Submission, Video Interview, MCQ) │
-└────────────────────┬────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────┐
-│                   FastAPI Backend                        │
-│                    (main.py, api.py)                     │
-└────────────────────┬────────────────────────────────────┘
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼             ▼
-   ┌────────┐  ┌─────────┐  ┌──────────┐
-   │ Gemini │  │ Qdrant  │  │  GitHub  │
-   │   AI   │  │ Vector  │  │   API    │
-   │        │  │   DB    │  │          │
-   └────────┘  └─────────┘  └──────────┘
-      │
-      ├─ Code Evaluation
-      ├─ Question Generation
-      ├─ Video Transcription
-      ├─ Final Analysis
-```
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
-## 📊 Scoring Breakdown
+## 📝 **License**
 
-### Code Quality Score (30%)
-- Functionality and correctness
-- Code structure and readability
-- Error handling
-- Performance considerations
-- Best practices
-
-### Video Interview Score (25%)
-- Technical accuracy
-- Communication clarity
-- Problem-solving approach
-- Depth of understanding
-- Professionalism
-
-### Resume Fit Score (15%)
-- Vector similarity between resume and ideal profile
-- Extracted via Gemini PDF processing
-- Scored using Qdrant cosine similarity
-
-### Code Fit Score (15%)
-- Vector similarity between code description and task
-- Measures how well solution addresses requirements
-
-### MCQ Score (15%)
-- Deterministic scoring
-- Tests technical knowledge
-- Generated based on candidate's code
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## 🎨 Key Features
+## 👥 **Team**
 
-### 1. **Real GitHub Integration**
-```python
-# Fetches actual code files from GitHub
-code_content = fetch_github_code("https://github.com/user/repo")
-```
-
-### 2. **Dynamic Question Generation**
-```python
-# Questions specific to candidate's code
-interview_questions = stage1_evaluate_code(...)
-# Example: "Why did you use a hash map instead of an array?"
-```
-
-### 3. **Multimodal Video Transcription**
-```python
-# Gemini processes video + audio
-transcriptions = transcribe_video_responses(videos)
-```
-
-### 4. **Vector Semantic Matching**
-```python
-# Qdrant calculates similarity scores
-resume_fit = qdrant_scorer.score_resume_fit(resume_pdf, ideal_profile)
-code_fit = qdrant_scorer.score_code_fit(code_desc, task_desc)
-```
+Built with ❤️ by developers who believe hiring should be fair, comprehensive, and automated.
 
 ---
 
-## 🚨 Important Notes
+## 🙏 **Acknowledgments**
 
-### GitHub Code Fetching
-- Requires valid GitHub URL
-- Supports public repositories
-- For private repos: Add `GITHUB_TOKEN` to `.env`
-- Fetches up to 10 most relevant code files
-
-### Video Requirements
-- Format: WebM (recommended) or MP4
-- Max size: 50MB per video
-- Must include audio for transcription
-- Number of videos must match number of questions
-
-### PDF Resume
-- Must be valid PDF format
-- Text must be extractable (not scanned images)
-- Max size: 10MB
+- **Google Gemini** - For powerful multimodal AI capabilities
+- **Qdrant** - For semantic vector search
+- **FastAPI** - For the amazing web framework
+- **React Team** - For the incredible frontend library
 
 ---
 
-## 🐛 Troubleshooting
+## 📞 **Support**
 
-### "GitHub fetch failed"
-- Check repository URL is valid and public
-- Add `GITHUB_TOKEN` for private repos or higher rate limits
-
-### "Resume extraction failed"
-- Ensure PDF is text-based, not scanned image
-- Try a different PDF generator
-
-### "Video transcription failed"
-- Check video has audio track
-- Ensure video isn't corrupted
-- Verify video format is WebM or MP4
-
-### "Session not found"
-- Complete Stage 1 before Stage 3
-- Check `candidate_id` matches between requests
+- 📧 Email: support@holistichires.com
+- 💬 Discord: [Join our community](https://discord.gg/holistic-hires)
+- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/holistic-hires/issues)
 
 ---
 
-## 📝 Example Usage
+<div align="center">
 
-```python
-# Backend Test Script
-import requests
+**⭐ Star this repo if you believe in fair, AI-powered hiring! ⭐**
 
-# Stage 1: Start evaluation
-with open('resume.pdf', 'rb') as f:
-    response = requests.post('http://localhost:8000/api/evaluate/start', files={
-        'resume_file': f
-    }, data={
-        'repo_link': 'https://github.com/user/solution',
-        'candidate_id': 'CAND_001',
-        'jd_id': 'JD_001',
-        'job_description': '...',
-        'ideal_candidate_profile': '...',
-        'task_description': '...'
-    })
+Made with 🤖 by developers, for developers
 
-data = response.json()
-print(f"Interview Questions: {data['interview_questions']}")
-
-# Stage 3: Submit responses
-with open('video1.webm', 'rb') as v1, open('video2.webm', 'rb') as v2:
-    response = requests.post('http://localhost:8000/api/evaluate/submit-responses', files={
-        'interview_videos': [v1, v2, ...]
-    }, data={
-        'candidate_id': 'CAND_001',
-        'mcq_answers': '["A", "B", "C"]'
-    })
-
-result = response.json()
-print(f"Overall Score: {result['overall_score']}")
-print(f"Recommendation: {result['recommendation']}")
-```
-
----
-
-## 🏆 Winning Strategy for AI Genesis Hackathon
-
-### Innovation Highlights
-1. **Real GitHub Code Fetching** - Not just analyzing uploaded files
-2. **Dynamic Personalized Questions** - Each candidate gets unique interview
-3. **Multimodal AI** - Video + Audio + PDF + Code analysis
-4. **Semantic Matching** - Vector similarity for intelligent scoring
-5. **Production-Ready** - Complete pipeline with error handling
-
-### Demo Flow
-1. Show landing page with role selection
-2. Candidate applies with resume + GitHub repo
-3. AI generates custom questions in real-time
-4. Candidate records video interview
-5. Comprehensive evaluation with detailed breakdown
-6. Company dashboard (future) to search candidates
-
----
-
-## 📄 License
-
-MIT License - Built for AI Genesis Hackathon 2025
-
----
-
-## 🤝 Contributing
-
-This is a hackathon project, but contributions are welcome!
-
----
-
-**Built with ❤️ using Gemini, Qdrant, FastAPI, and React**
+</div>
