@@ -7,3 +7,5 @@ requests
 python-multipart
 PyPDF2
 pydantic
+qdrant_client
+google-generativeai
