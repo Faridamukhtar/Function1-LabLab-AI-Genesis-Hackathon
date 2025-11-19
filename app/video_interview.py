@@ -15,7 +15,7 @@ GEMINI_API_KEY = os.getenv("GENAI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
 # FREE TIER MODEL (supports text + PDF, NOT video)
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 model = genai.GenerativeModel(GEMINI_MODEL)
 

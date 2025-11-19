@@ -8,7 +8,7 @@ from app.github_fetcher import fetch_github_code
 load_dotenv()
 
 GENAI_API_KEY = os.getenv("GENAI_API_KEY")
-GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-flash-latest")
+GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-2.0-flash")
 
 if not GENAI_API_KEY:
     raise ValueError("GENAI_API_KEY not found in environment variables")
