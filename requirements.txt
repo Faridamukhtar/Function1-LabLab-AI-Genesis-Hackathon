@@ -2,12 +2,6 @@ fastapi
 uvicorn[standard]
 python-dotenv
 google-genai
-
-# Lighter sentence-transformers setup
-sentence-transformers==2.2.2
-torch==2.2.0  # Specify exact version
---extra-index-url https://download.pytorch.org/whl/cpu  # CPU-only PyTorchqdrant-client
-
 pypdf
 requests
 python-multipart

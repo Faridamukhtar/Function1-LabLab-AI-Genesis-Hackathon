@@ -1,18 +1,53 @@
 import os
 import uuid
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
-from sentence_transformers.util import cos_sim
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
+from google import genai
+from google.genai import types
 
 load_dotenv()
 
 # ------------------------------------------
-# EMBEDDINGS
+# GEMINI EMBEDDINGS (REPLACES SENTENCE-TRANSFORMERS)
 # ------------------------------------------
-EMBEDDING_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-VECTOR_DIM = EMBEDDING_MODEL.get_sentence_embedding_dimension()
+GENAI_API_KEY = os.getenv("GENAI_API_KEY")
+genai_client = genai.Client(api_key=GENAI_API_KEY)
+
+# Gemini embedding model - 768 dimensions
+EMBEDDING_MODEL = "models/text-embedding-004"
+VECTOR_DIM = 384
+
+
+def get_embedding(text: str):
+    """
+    Get embedding from Gemini API
+    Replaces sentence-transformers
+    """
+    try:
+        result = genai_client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=text
+        )
+        return result.embeddings[0].values[:384]
+    except Exception as e:
+        print(f"   ⚠️ Embedding error: {str(e)}")
+        # Return zero vector as fallback
+        return [0.0] * VECTOR_DIM
+
+
+def cosine_similarity(vec1, vec2):
+    """Calculate cosine similarity between two vectors"""
+    import math
+    
+    dot_product = sum(a * b for a, b in zip(vec1, vec2))
+    magnitude1 = math.sqrt(sum(a * a for a in vec1))
+    magnitude2 = math.sqrt(sum(b * b for b in vec2))
+    
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+    
+    return dot_product / (magnitude1 * magnitude2)
 
 
 # ------------------------------------------
@@ -47,8 +82,7 @@ else:
 # ------------------------------------------
 def extract_resume_text_from_pdf(resume_bytes: bytes) -> str:
     """
-    Extract text from PDF using PyPDF2 or pdfplumber
-    Install: pip install PyPDF2
+    Extract text from PDF using PyPDF2
     """
     print(f"   📄 Extracting text from PDF resume...")
     
@@ -88,7 +122,7 @@ def index_candidate(final_analysis: dict, candidate_id: str = None):
 
     try:
         summary = final_analysis.get("summary", "")
-        embedding = EMBEDDING_MODEL.encode(summary).tolist()
+        embedding = get_embedding(summary)
 
         qdrant_client.upsert(
             collection_name=COLLECTION,
@@ -112,7 +146,7 @@ def search_candidates(jd_text: str, limit: int = 5):
         return []
 
     try:
-        query_vector = EMBEDDING_MODEL.encode(jd_text).tolist()
+        query_vector = get_embedding(jd_text)
         results = qdrant_client.search(
             collection_name=COLLECTION,
             query_vector=query_vector,
@@ -126,17 +160,16 @@ def search_candidates(jd_text: str, limit: int = 5):
 
 
 # ==========================================================
-# 🚀 EMBEDDING-BASED SCORER (NO GEMINI)
+# 🚀 GEMINI-BASED SCORER (NO SENTENCE-TRANSFORMERS)
 # ==========================================================
 class QdrantScorer:
     """
-    Pure embedding-based scoring using semantic similarity
-    - Uses sentence transformers for all scoring
-    - No external API calls needed
+    Pure Gemini-based scoring using API embeddings
+    - Uses Gemini API for all embeddings
+    - No heavy ML packages required
     """
 
     def __init__(self):
-        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
         self.client = qdrant_client
 
     # ------------------------------------------------------
@@ -166,13 +199,13 @@ class QdrantScorer:
     # ------------------------------------------------------
     def _semantic_similarity_score(self, text1, text2):
         """
-        Calculate semantic similarity between two texts
+        Calculate semantic similarity between two texts using Gemini embeddings
         Returns score from 1-100
         """
         try:
-            vec1 = self.embedding_model.encode(text1)
-            vec2 = self.embedding_model.encode(text2)
-            sim = float(cos_sim(vec1, vec2))  # -1 to 1
+            vec1 = get_embedding(text1)
+            vec2 = get_embedding(text2)
+            sim = cosine_similarity(vec1, vec2)  # -1 to 1
             score = int(((sim + 1) / 2) * 100)  # Convert to 1-100
             return max(1, min(100, score))
         except Exception as e:
@@ -251,9 +284,9 @@ class QdrantScorer:
             return self._semantic_similarity_score(code_description, task_description)
         
         try:
-            # Embed code and task
-            code_embedding = self.embedding_model.encode(code_description).tolist()
-            task_embedding = self.embedding_model.encode(task_description).tolist()
+            # Embed code and task using Gemini
+            code_embedding = get_embedding(code_description)
+            task_embedding = get_embedding(task_description)
 
             # Store code vector
             point_id = int(uuid.uuid4().int % (2**63))
